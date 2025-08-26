@@ -122,10 +122,11 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $context = context_course::instance($instance->courseid);
         if (has_capability('enrol/authorizedotnet:config', $context)) {
             $managelink = new moodle_url(
-                '/enrol/authorizedotnet/edit.php',
+                '/enrol/editinstance.php',
                 [
                     'courseid' => $instance->courseid,
-                    'id' => $instance->id
+                    'id' => $instance->id,
+                    'type' => 'authorizedotnet'
                 ]
             );
             $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
@@ -146,9 +147,9 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $icons = [];
         if (has_capability('enrol/authorizedotnet:config', $context)) {
             $editlink = new moodle_url(
-                "/enrol/authorizedotnet/edit.php",
+                "/enrol/editinstance.php",
                 [
-                    'courseid' => $instance->courseid, 'id' => $instance->id
+                    'courseid' => $instance->courseid, 'id' => $instance->id, 'type' => 'authorizedotnet'
                 ]
             );
             $icons[] = $OUTPUT->action_icon($editlink, new pix_icon('t/edit', get_string('edit'), 'core',
@@ -172,7 +173,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
             return null;
         }
         // Multiple instances supported - different cost for different roles.
-        return new moodle_url('/enrol/authorizedotnet/edit.php', ['courseid' => $courseid]);
+        return new moodle_url('/enrol/editinstance.php', ['courseid' => $courseid, 'type' => 'authorizedotnet']);
     }
 
     /**
@@ -183,81 +184,154 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
      * @return string html text, usually a form in a text box
      */
     public function enrol_page_hook(stdClass $instance) {
-        global $CFG, $USER, $OUTPUT, $DB;
-        ob_start();
+        global $CFG, $USER, $OUTPUT, $DB, $PAGE;
 
         if ($DB->record_exists('user_enrolments', ['userid' => $USER->id, 'enrolid' => $instance->id])) {
-            return ob_get_clean();
+            return '';
         }
 
         if ($instance->enrolstartdate != 0 && $instance->enrolstartdate > time()) {
-            return ob_get_clean();
+            $message = get_string('canntenrolearly', 'enrol_authorizedotnet', userdate($instance->enrolstartdate));
+            return $OUTPUT->notification($message, 'info');
         }
+
         if ($instance->enrolenddate != 0 && $instance->enrolenddate < time()) {
-            return ob_get_clean();
+            $message = get_string('canntenrollate', 'enrol_authorizedotnet', userdate($instance->enrolenddate));
+            return $OUTPUT->notification($message, 'error');
         }
 
         $course = $DB->get_record('course', ['id' => $instance->courseid]);
         $context = context_course::instance($course->id);
-        $teacher = false;
-        $cost = (float) $instance->cost;
-        // Pass $view=true to filter hidden caps if the user cannot see them.
-        if ($users = get_users_by_capability(
-            $context,
-            'moodle/course:update',
-            'u.*',
-            'u.id ASC',
-            '',
-            '',
-            '',
-            '',
-            false,
-            true
-        )) {
-            $users = sort_by_roleassignment_authority($users, $context);
-            $teacher = array_shift($users);
-        }
 
-        if ( (float) $instance->cost <= 0 ) {
+        if ((float) $instance->cost <= 0) {
             $cost = (float) $this->get_config('cost');
+        } else {
+            $cost = (float) $instance->cost;
         }
 
         if (abs($cost) < 0.01) {
-            // No cost, other enrolment methods (instances) should be used.
-            echo '<p>'.get_string('nocost', 'enrol_authorizedotnet').'</p>';
-        } else {
-            // Calculate localised and "." cost, make sure we send Authorize.net the same value,
-            // please note Authorize.net expects amount with 2 decimal places and "." separator.
-            $localisedcost = format_float($cost, 2, true);
-            $cost = format_float($cost, 2, false);
-
-            if (isguestuser()) {
-                // Force login only for guest user, not real users with guest role.
-                if (empty($CFG->loginhttps)) {
-                    $wwwroot = $CFG->wwwroot;
-                } else {
-                    // This actually is not so secure ;-), 'cause we're
-                    // in unencrypted connection...
-                    $wwwroot = str_replace("http://", "https://", $CFG->wwwroot);
-                }
-                echo '<div class="mdl-align"><p>'.get_string('paymentrequired').'</p>';
-                echo '<p><b>'.get_string('cost').": $instance->currency $localisedcost".'</b></p>';
-                echo '<p><a href="'.$wwwroot.'/login/">'.get_string('loginsite').'</a></p>';
-                echo '</div>';
-            } else {
-                include_once($CFG->dirroot.'/enrol/authorizedotnet/enrolment_form.php');
-                $mform = new enrol_authorizedotnet_form(null, ['instance' => $instance, 'localisedcost' => $localisedcost]);
-                // If we want to pass a object through constructor we cant pass it directly.
-                if ($data = $mform->get_data()) {
-                    if (confirm_sesskey()) {
-                        $paymentprocess = new \enrol_authorizedotnet_payment_process($data, $instance->courseid, $USER->id, $instance->id);
-                        $paymentprocess->process_enrolment();
-                    }
-                }
-                $mform->display();
-            }
+            return $OUTPUT->notification(get_string('nocost', 'enrol_authorizedotnet'));
         }
-        return $OUTPUT->box(ob_get_clean());
+
+        $localisedcost = format_float($cost, 2, true);
+
+        if (isguestuser()) {
+            $wwwroot = empty($CFG->loginhttps) ? $CFG->wwwroot : str_replace('http://', 'https://', $CFG->wwwroot);
+            $output = '<div class="mdl-align"><p>'.get_string('paymentrequired').'</p>';
+            $output .= '<p><b>'.get_string('cost').": $instance->currency $localisedcost".'</b></p>';
+            $output .= '<p><a href="'.$wwwroot.'/login/">'.get_string('loginsite').'</a></p>';
+            $output .= '</div>';
+            return $OUTPUT->box($output);
+        }
+
+        $user = $DB->get_record('user', ['id' => $USER->id]);
+
+        $templatedata = [
+            'coursename' => format_string($course->fullname, true, ['context' => $context]),
+            'cost' => $cost,
+            'currency' => $instance->currency,
+            'localisedcost' => $localisedcost,
+            'user' => $user,
+            'instance' => $instance,
+            'wwwroot' => $CFG->wwwroot,
+        ];
+
+        $body = $OUTPUT->render_from_template('enrol_authorizedotnet/enrolment_form', $templatedata);
+        
+        $PAGE->requires->js_call_amd('enrol_authorizedotnet/payment', 'init',
+            [
+                $instance->id,
+                $instance->courseid,
+                $USER->id
+            ]
+        );
+
+        return $OUTPUT->box($body);
+    }
+
+    /**
+     * We are a good plugin and don't invent our own UI/validation code path.
+     *
+     * @return boolean
+     */
+    public function use_standard_editing_ui() {
+        return true;
+    }
+
+    /**
+     * Add elements to the edit instance form.
+     *
+     * @param stdClass $instance
+     * @param MoodleQuickForm $mform
+     * @param context $context
+     * @return bool
+     */
+    public function edit_instance_form($instance, MoodleQuickForm $mform, $context) {
+        $mform->addElement('text', 'name', get_string('custominstancename', 'enrol'));
+        $mform->setType('name', PARAM_TEXT);
+
+        $options = [ENROL_INSTANCE_ENABLED  => get_string('yes'),
+                         ENROL_INSTANCE_DISABLED => get_string('no')];
+        $mform->addElement('select', 'status', get_string('status', 'enrol_authorizedotnet'), $options);
+        $mform->setDefault('status', $this->get_config('status'));
+
+        $mform->addElement('text', 'cost', get_string('cost', 'enrol_authorizedotnet'), ['size' => 4]);
+        $mform->setType('cost', PARAM_RAW); // Use unformat_float to get real value.
+        $mform->setDefault('cost', format_float($this->get_config('cost'), 2, true));
+
+        $currencies = $this->get_currencies();
+        $mform->addElement('select', 'currency', get_string('currency', 'enrol_authorizedotnet'), $currencies);
+        $mform->setDefault('currency', $this->get_config('currency'));
+
+        if ($instance->id) {
+            $roles = get_default_enrol_roles($context, $instance->roleid);
+        } else {
+            $roles = get_default_enrol_roles($context, $this->get_config('roleid'));
+        }
+        $mform->addElement('select', 'roleid', get_string('assignrole', 'enrol_authorizedotnet'), $roles);
+        $mform->setDefault('roleid', $this->get_config('roleid'));
+
+        $mform->addElement('duration', 'enrolperiod', get_string('enrolperiod', 'enrol_authorizedotnet'),
+                           ['optional' => true, 'defaultunit' => 86400]);
+        $mform->setDefault('enrolperiod', $this->get_config('enrolperiod'));
+        $mform->addHelpButton('enrolperiod', 'enrolperiod', 'enrol_authorizedotnet');
+
+        $mform->addElement('date_time_selector', 'enrolstartdate', get_string('enrolstartdate', 'enrol_authorizedotnet'),
+                           ['optional' => true]);
+        $mform->setDefault('enrolstartdate', 0);
+        $mform->addHelpButton('enrolstartdate', 'enrolstartdate', 'enrol_authorizedotnet');
+
+        $mform->addElement('date_time_selector', 'enrolenddate', get_string('enrolenddate', 'enrol_authorizedotnet'),
+                           ['optional' => true]);
+        $mform->setDefault('enrolenddate', 0);
+        $mform->addHelpButton('enrolenddate', 'enrolenddate', 'enrol_authorizedotnet');
+
+        if (enrol_accessing_via_instance($instance)) {
+            $mform->addElement('static', 'selfwarn', get_string('instanceeditselfwarning', 'core_enrol'),
+                                get_string('instanceeditselfwarningtext', 'core_enrol'));
+        }
+    }
+
+    /**
+     * Perform custom validation of the data used to edit the instance.
+     *
+     * @param array $data array of ("fieldname"=>value) of submitted data
+     * @param array $files array of uploaded files "element_name"=>tmp_file_path
+     * @return array of "element_name"=>"error_description" if there are errors,
+     *         or an empty array if everything is OK.
+     */
+    public function edit_instance_validation($data, $files, $instance, $context) {
+        $errors = [];
+
+        if (!empty($data['enrolenddate']) && $data['enrolenddate'] < $data['enrolstartdate']) {
+            $errors['enrolenddate'] = get_string('enrolenddaterror', 'enrol_authorizedotnet');
+        }
+
+        $cost = str_replace(get_string('decsep', 'langconfig'), '.', $data['cost']);
+        if (!is_numeric($cost)) {
+            $errors['cost'] = get_string('costerror', 'enrol_authorizedotnet');
+        }
+        return $errors;
     }
 
     /**

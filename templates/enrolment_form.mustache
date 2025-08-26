@@ -1,0 +1,115 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template enrol_authorizedotnet/enrolment_form
+
+    Contents of the enrolment widget on the course enrolment page
+
+    Example context (json):
+    {
+        "cost": "10.00",
+        "currency": "USD",
+        "coursename": "Course Name",
+        "instanceid": "1",
+        "wwwroot": "https://example.com"
+    }
+}}
+<div class="authorize-imgwrap">
+    <img src="{{wwwroot}}/enrol/authorizedotnet/pix/authorize-net-logo.png">
+</div>
+<div class="authorize-card-img">
+    <img src="{{wwwroot}}/enrol/authorizedotnet/pix/paynow.png">
+</div>
+<div class="authorize-payment-header">
+    <h1>{{#str}}paymentinfo, enrol_authorizedotnet{{/str}}</h1>
+</div>
+<div class="authorize-total-order-amount-section">
+    <h6>{{#str}}orderinfo, enrol_authorizedotnet{{/str}}</h6>
+    <div>{{currency}}{{localisedcost}}</div>
+</div>
+<div>
+    <h6>{{#str}}paymentinfo, enrol_authorizedotnet{{/str}}</h6>
+</div>
+<form id="payment_form-{{instanceid}}">
+    <div class="form-group">
+        <label for="cardnumber-{{instanceid}}">{{#str}}cardnumber, enrol_authorizedotnet{{/str}}</label>
+        <input type="text" id="cardnumber-{{instanceid}}" name="cardnumber" class="form-control" placeholder="{{#str}}cardnumberplaceholder, enrol_authorizedotnet{{/str}}" required>
+    </div>
+    <div class="form-row">
+        <div class="form-group col-md-6">
+            <label for="expmonth-{{instanceid}}">{{#str}}expmonth, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="expmonth-{{instanceid}}" name="expmonth" class="form-control" placeholder="{{#str}}expmonthplaceholder, enrol_authorizedotnet{{/str}}" required>
+        </div>
+        <div class="form-group col-md-6">
+            <label for="expyear-{{instanceid}}">{{#str}}expyear, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="expyear-{{instanceid}}" name="expyear" class="form-control" placeholder="{{#str}}expyearplaceholder, enrol_authorizedotnet{{/str}}" required>
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="cardcode-{{instanceid}}">{{#str}}cardcode, enrol_authorizedotnet{{/str}}</label>
+        <input type="text" id="cardcode-{{instanceid}}" name="cardcode" class="form-control" placeholder="{{#str}}cardcodeplaceholder, enrol_authorizedotnet{{/str}}" required>
+    </div>
+    <h6>{{#str}}billinginfo, enrol_authorizedotnet{{/str}}</h6>
+    <div class="form-row">
+        <div class="form-group col-md-6">
+            <label for="firstname-{{instanceid}}">{{#str}}firstname, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="firstname-{{instanceid}}" name="firstname" class="form-control" value="{{user.firstname}}" required>
+        </div>
+        <div class="form-group col-md-6">
+            <label for="lastname-{{instanceid}}">{{#str}}lastname, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="lastname-{{instanceid}}" name="lastname" class="form-control" value="{{user.lastname}}" required>
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="email-{{instanceid}}">{{#str}}email, enrol_authorizedotnet{{/str}}</label>
+        <input type="email" id="email-{{instanceid}}" name="email" class="form-control" value="{{user.email}}" required>
+    </div>
+    <div class="form-group">
+        <label for="phone-{{instanceid}}">{{#str}}phone, enrol_authorizedotnet{{/str}}</label>
+        <input type="text" id="phone-{{instanceid}}" name="phone" class="form-control" value="{{user.phone1}}">
+    </div>
+    <div class="form-group">
+        <label for="address-{{instanceid}}">{{#str}}address, enrol_authorizedotnet{{/str}}</label>
+        <input type="text" id="address-{{instanceid}}" name="address" class="form-control" value="{{user.address}}" required>
+    </div>
+    <div class="form-row">
+        <div class="form-group col-md-6">
+            <label for="city-{{instanceid}}">{{#str}}city, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="city-{{instanceid}}" name="city" class="form-control" value="{{user.city}}" required>
+        </div>
+        <div class="form-group col-md-4">
+            <label for="state-{{instanceid}}">{{#str}}state, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="state-{{instanceid}}" name="state" class="form-control" required>
+        </div>
+        <div class="form-group col-md-2">
+            <label for="zip-{{instanceid}}">{{#str}}ZIP, enrol_authorizedotnet{{/str}}</label>
+            <input type="text" id="zip-{{instanceid}}" name="zip" class="form-control" required>
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="country-{{instanceid}}">{{#str}}country, enrol_authorizedotnet{{/str}}</label>
+        <select id="country-{{instanceid}}" name="country" class="form-control" required>
+            <option value="">{{#str}}notselected, enrol_authorizedotnet{{/str}}</option>
+            <option value="US">{{#str}}country_us, enrol_authorizedotnet{{/str}}</option>
+            <option value="AU">{{#str}}country_australia, enrol_authorizedotnet{{/str}}</option>
+            <option value="CA">{{#str}}country_canada, enrol_authorizedotnet{{/str}}</option>
+        </select>
+    </div>
+    <div id="payment_error-{{instanceid}}" class="text-danger"></div>
+    <input type="hidden" name="id" value="{{instance.courseid}}">
+    <button type="submit" class="btn btn-primary">{{#str}}pay, enrol_authorizedotnet{{/str}}</button>
+</form>
