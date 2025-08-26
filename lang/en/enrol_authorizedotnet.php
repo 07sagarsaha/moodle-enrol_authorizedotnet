@@ -122,3 +122,4 @@ $string['stateplaceholder'] = 'Sydney';
 $string['notselected'] = 'Please select your country';
 $string['required'] = 'required';
 $string['invalidsesskey'] = 'Invalid sesskey';
+$string['pleasewait'] = 'Please wait...';

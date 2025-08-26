@@ -24,11 +24,11 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-
+use core_enrol\output\enrol_page;
 require_once($CFG->dirroot.'/enrol/authorizedotnet/classes/enrol_authorizedotnet_paymentprocess.php');
 
 /**
- *  Plugin functions for the authorizedotnet plugin
+ * Plugin functions for the authorizedotnet plugin
  * @package    enrol_authorizedotnet
  * @author     DualCube <admin@dualcube.com>
  * @copyright  2021 DualCube (https://dualcube.com)
@@ -213,18 +213,17 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
             return $OUTPUT->notification(get_string('nocost', 'enrol_authorizedotnet'));
         }
 
+        // Fix: Assign a value to the localisedcost variable before using it.
         $localisedcost = format_float($cost, 2, true);
 
-        if (isguestuser()) {
-            $wwwroot = empty($CFG->loginhttps) ? $CFG->wwwroot : str_replace('http://', 'https://', $CFG->wwwroot);
-            $output = '<div class="mdl-align"><p>'.get_string('paymentrequired').'</p>';
-            $output .= '<p><b>'.get_string('cost').": $instance->currency $localisedcost".'</b></p>';
-            $output .= '<p><a href="'.$wwwroot.'/login/">'.get_string('loginsite').'</a></p>';
-            $output .= '</div>';
-            return $OUTPUT->box($output);
-        }
-
         $user = $DB->get_record('user', ['id' => $USER->id]);
+
+
+        // Add the Accept.js script for the hosted form.
+        $acceptjsurl = 'https://js.authorize.net/v1/Accept.js';
+        if ($this->get_config('checkproductionmode') == 1) { // 1 means sandbox mode.
+            $acceptjsurl = 'https://jstest.authorize.net/v1/Accept.js';
+        }
 
         $templatedata = [
             'coursename' => format_string($course->fullname, true, ['context' => $context]),
@@ -233,20 +232,33 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
             'localisedcost' => $localisedcost,
             'user' => $user,
             'instance' => $instance,
+            'instanceid' => $instance->id,
             'wwwroot' => $CFG->wwwroot,
+            'acceptjsurl' => $acceptjsurl,
         ];
 
-        $body = $OUTPUT->render_from_template('enrol_authorizedotnet/enrolment_form', $templatedata);
-        
-        $PAGE->requires->js_call_amd('enrol_authorizedotnet/payment', 'init',
+        // FIX: The previous attempt to call `external_js` resulted in a "Call to undefined method" error.
+        // The correct method in modern Moodle to load an external script and then
+        // initialize an AMD module is `js_init_amd`.
+        $PAGE->requires->js_call_amd(
+            'enrol_authorizedotnet/payment',
+            'authorizeDotNetPayment',
             [
                 $instance->id,
-                $instance->courseid,
-                $USER->id
-            ]
+                $course->id,
+                $USER->id,
+                get_string('pay', 'enrol_authorizedotnet'),
+                get_string('pleasewait', 'enrol_authorizedotnet')
+            ],
         );
 
-        return $OUTPUT->box($body);
+        $body = $OUTPUT->render_from_template('enrol_authorizedotnet/enrolment_form', $templatedata);
+        $enrolpage = new enrol_page(
+            instance: $instance,
+            header: $this->get_instance_name($instance),
+            body: $body
+        );
+        return $OUTPUT->render($enrolpage);
     }
 
     /**
@@ -318,7 +330,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
      * @param array $data array of ("fieldname"=>value) of submitted data
      * @param array $files array of uploaded files "element_name"=>tmp_file_path
      * @return array of "element_name"=>"error_description" if there are errors,
-     *         or an empty array if everything is OK.
+     * or an empty array if everything is OK.
      */
     public function edit_instance_validation($data, $files, $instance, $context) {
         $errors = [];

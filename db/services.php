@@ -12,14 +12,14 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
 
 /**
  * Services definition for authorizedotnet.
  *
  * @package    enrol_authorizedotnet
- * @author     Your Name
- * @copyright  2024 Your Name
+ * @author     DualCube
+ * @copyright  2024 DualCube
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -33,5 +33,21 @@ $functions = [
         'description' => 'Process a payment for authorizedotnet enrolment.',
         'type'        => 'write',
         'ajax'        => true,
-    ]
+    ],
+    'enrol_authorizedotnet_get_hosted_form_token' => [
+        'classname'   => 'enrol_authorizedotnet_external',
+        'methodname'  => 'get_hosted_form_token',
+        'classpath'   => 'enrol/authorizedotnet/externallib.php',
+        'description' => 'Generates a hosted payment form token for the client.',
+        'type'        => 'write',
+        'ajax'        => true,
+    ],
+    'enrol_authorizedotnet_finalize_enrollment' => [
+        'classname'   => 'enrol_authorizedotnet_external',
+        'methodname'  => 'finalize_enrollment',
+        'classpath'   => 'enrol/authorizedotnet/externallib.php',
+        'description' => 'Finalizes the enrollment after a successful payment.',
+        'type'        => 'write',
+        'ajax'        => true,
+    ],
 ];
