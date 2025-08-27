@@ -72,11 +72,6 @@ class enrol_authorizedotnet_externallib extends external_api {
         $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
         $merchantAuthentication->setName($plugin->get_config('loginid'));
         $merchantAuthentication->setTransactionKey($plugin->get_config('transactionkey'));
-        file_put_contents("/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
-            "LoginID: " . $plugin->get_config('loginid') .
-            " | TransactionKey: " . $plugin->get_config('transactionkey') . "\n",
-            FILE_APPEND
-        );
 
         // Create the transaction request.
         $transactionRequestType = new AnetAPI\TransactionRequestType();
@@ -120,9 +115,13 @@ class enrol_authorizedotnet_externallib extends external_api {
         $request->addToHostedPaymentSettings($setting3);
 
         $controller = new AnetController\GetHostedPaymentPageController($request);
-        $useSandbox = (bool)$plugin->get_config('checkproductionmode');
+        $useSandbox = !(bool)$plugin->get_config('checkproductionmode');
 
-        $endpoint = \net\authorize\api\constants\ANetEnvironment::SANDBOX ;
+        if ($useSandbox) {
+            $endpoint = \net\authorize\api\constants\ANetEnvironment::SANDBOX;
+        } else {
+            $endpoint = \net\authorize\api\constants\ANetEnvironment::PRODUCTION;
+        }
         
         // Execute the API call.
         $response = $controller->executeWithApiResponse($endpoint);
@@ -131,9 +130,6 @@ class enrol_authorizedotnet_externallib extends external_api {
         if ($response && $response->getMessages()->getResultCode() === "Ok") {
             $token = $response->getToken();
             
-            // Log the successful token generation.
-            file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":session_params:  : " . var_export($token, true) . "\n", FILE_APPEND);
-
             $formUrl = $useSandbox
                 ? 'https://test.authorize.net/payment/payment'
                 : 'https://accept.authorize.net/payment/payment';
@@ -153,8 +149,6 @@ class enrol_authorizedotnet_externallib extends external_api {
             } else {
                 $errorMessageText = 'An unknown API error occurred.';
             }
-
-            file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":API Error: " . $errorMessageText . "\n", FILE_APPEND);
 
             return [
                 'status' => false,

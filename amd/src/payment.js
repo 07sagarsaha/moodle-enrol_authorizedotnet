@@ -96,7 +96,7 @@ function authorizeNetPayment(instanceid, userid) {
         try {
             const response = await getHostedPaymentUrl(instanceid, userid);
             if (response?.status && response.url) {
-                //window.location.href = response.url;
+                window.location.href = response.url;
             } else {
                 displayError(response?.error || "Unable to initiate payment.");
                 DOM.setButton("enrolbutton", false, "Pay Now");
