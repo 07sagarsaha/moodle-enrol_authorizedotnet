@@ -12,7 +12,7 @@
     ],
     "require": {
     "php": ">=5.6",
-    "authorizenet/authorizenet": "2.0.3"
+    "authorizenet/authorizenet": "2.0.4"
     },
     "autoload": {
         "psr-4": {

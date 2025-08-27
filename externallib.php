@@ -1,7 +1,7 @@
 <?php
 // This file is part of Moodle - http://moodle.org/
 //
-// Moodle is free software: you can redistribute it and/or modify
+// Moodle is free software: you can redistribute and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,15 +15,11 @@
 // along with Moodle. If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * External library for authorizedotnet using Accept Hosted.
- *
- * This file handles two main API calls:
- * 1. Generating a secure payment form token for Accept Hosted.
- * 2. Finalizing the enrolment after the user successfully completes the hosted form.
+ * External library for authorizedotnet.
  *
  * @package    enrol_authorizedotnet
- * @author     Your Name
- * @copyright  2024 Your Name
+ * @author     DualCube <admin@dualcube.com>
+ * @copyright  2021 DualCube (https://dualcube.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -35,141 +31,110 @@ use core_external\external_value;
 use core_external\external_single_structure;
 use moodle_url;
 
-require_once("$CFG->libdir/enrollib.php");
-require_once(__DIR__ . '/classes/enrol_authorizedotnet_paymentprocess.php');
+require_once("$CFG->libdir/externallib.php");
+require_once("$CFG->dirroot/enrol/authorizedotnet/vendor/autoload.php");
 
-class enrol_authorizedotnet_external extends external_api {
+use net\authorize\api\contract\v1 as AnetAPI;
+use net\authorize\api\controller as AnetController;
 
-    /**
-     * Define the parameters for the hosted form token request.
-     *
-     * @return external_function_parameters
-     */
-    public static function get_hosted_form_token_parameters() {
+class enrol_authorizedotnet_externallib extends external_api {
+
+    public static function get_hosted_payment_url_parameters() {
         return new external_function_parameters([
             'instanceid' => new external_value(PARAM_INT, 'Enrolment instance ID'),
         ]);
     }
 
-    /**
-     * Define the return value for the hosted form token request.
-     *
-     * @return external_single_structure
-     */
-    public static function get_hosted_form_token_returns() {
-        return new external_single_structure([
-            'status' => new external_value(PARAM_BOOL, 'True if token is successful'),
-            'token' => new external_value(PARAM_RAW, 'The hosted form token', VALUE_OPTIONAL),
-            'redirecturl' => new external_value(PARAM_URL, 'URL to redirect after payment', VALUE_OPTIONAL),
-            'message' => new external_value(PARAM_TEXT, 'Error message', VALUE_OPTIONAL)
-        ]);
-    }
+    public static function get_hosted_payment_url($instanceid) {
+        global $CFG, $USER, $DB;
 
-    /**
-     * Generates a hosted payment form token from Authorize.Net.
-     *
-     * @param int $instanceid The enrolment instance ID.
-     * @return array
-     */
-    public static function get_hosted_form_token($instanceid) {
-        global $CFG, $DB, $USER;
-
-        self::validate_context(context_user::instance($USER->id));
+        self::validate_parameters(self::get_hosted_payment_url_parameters(), ['instanceid' => $instanceid]);
 
         $instance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'authorizedotnet'], '*', MUST_EXIST);
         $course = $DB->get_record('course', ['id' => $instance->courseid], '*', MUST_EXIST);
+        $context = context_course::instance($course->id);
+        self::validate_context($context);
 
-        $paymentprocess = new \enrol_authorizedotnet_payment_process(
-            $instance->cost,  // Use the enrol instance cost
-            $course->id,
-            $USER->id,
-            $instance        // pass full object, not just id
-        );
+        if ((float) $instance->cost <= 0) {
+            $plugin = enrol_get_plugin('authorizedotnet');
+            $cost = (float) $plugin->get_config('cost');
+        } else {
+            $cost = (float) $instance->cost;
+        }
 
-
-        try {
-            $token = $paymentprocess->create_hosted_payment_token();
-
-            return [
-                'status' => true,
-                'token' => $token
-            ];
-
-        } catch (\Exception $e) {
-            $message = $e->getMessage();
+        if (abs($cost) < 0.01) {
             return [
                 'status' => false,
-                'message' => $message
+                'error' => get_string('nocost', 'enrol_authorizedotnet'),
+            ];
+        }
+
+        $plugin = enrol_get_plugin('authorizedotnet');
+        $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
+        $merchantAuthentication->setName($plugin->get_config('loginid'));
+        $merchantAuthentication->setTransactionKey($plugin->get_config('transactionkey'));
+
+        // Create the transaction request.
+        $transactionRequestType = new AnetAPI\TransactionRequestType();
+        $transactionRequestType->setTransactionType("authCaptureTransaction");
+        $transactionRequestType->setAmount($cost);
+
+        $returnUrlParams = [
+            'courseid' => $instance->courseid,
+            'userid' => $USER->id,
+            'instanceid' => $instance->id,
+            'sesskey' => sesskey(),
+        ];
+        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php', $returnUrlParams);
+
+        $setting1 = new AnetAPI\SettingType();
+        $setting1->setSettingName("hostedPaymentButtonOptions");
+        $setting1->setSettingValue("{\"text\": \"Pay\"}");
+
+        $setting2 = new AnetAPI\SettingType();
+        $setting2->setSettingName("hostedPaymentReturnOptions");
+        $setting2->setSettingValue(
+            "{\"showReceipt\": true, \"url\": \"" . $returnUrl->out(false) . "\", \"urlText\": \"Continue to Course\", \"cancelUrl\": \"" . (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false) . "\", \"cancelUrlText\": \"Cancel\"}"
+        );
+
+        $setting3 = new AnetAPI\SettingType();
+        $setting3->setSettingName("hostedPaymentPaymentOptions");
+        $setting3->setSettingValue("{\"cardCodeRequired\": false, \"showCreditCard\": true, \"showBankAccount\": false}");
+
+        $request = new AnetAPI\GetHostedPaymentPageRequest();
+        $request->setMerchantAuthentication($merchantAuthentication);
+        $request->setTransactionRequest($transactionRequestType);
+        $request->addToHostedPaymentSettings($setting1);
+        $request->addToHostedPaymentSettings($setting2);
+        $request->addToHostedPaymentSettings($setting3);
+
+        $controller = new AnetController\GetHostedPaymentPageController($request);
+        $endpoint = $plugin->get_config('checkproductionmode') ? \net\authorize\api\constants\ANetEnvironment::SANDBOX : \net\authorize\api\constants\ANetEnvironment::PRODUCTION;
+        $response = $controller->executeWithApiResponse($endpoint);
+
+        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
+            $token = $response->getToken();
+            $formUrl = $plugin->get_config('checkproductionmode') ? 'https://test.authorize.net/payment/payment' : 'https://accept.authorize.net/payment/payment';
+            
+            // Instead of a redirect, we return the URL to the JS.
+            return [
+                'status' => true,
+                'url' => $formUrl . '?token=' . $token,
+            ];
+        } else {
+            $errorMessages = $response->getMessages()->getMessage();
+            return [
+                'status' => false,
+                'error' => get_string('errorheading', 'enrol_authorizedotnet') . $errorMessages[0]->getCode() . " " . $errorMessages[0]->getText(),
             ];
         }
     }
 
-    /**
-     * Define the parameters for finalizing the enrollment.
-     *
-     * @return external_function_parameters
-     */
-    public static function finalize_enrollment_parameters() {
-        return new external_function_parameters([
-            'instanceid' => new external_value(PARAM_INT, 'Enrolment instance ID'),
-            'dataDescriptor' => new external_value(PARAM_RAW, 'The data descriptor from Authorize.Net'),
-            'dataValue' => new external_value(PARAM_RAW, 'The data value from Authorize.Net')
-        ]);
-    }
-
-    /**
-     * Define the return value for finalizing the enrollment.
-     *
-     * @return external_single_structure
-     */
-    public static function finalize_enrollment_returns() {
+    public static function get_hosted_payment_url_returns() {
         return new external_single_structure([
-            'status' => new external_value(PARAM_BOOL, 'True if enrollment is successful'),
-            'redirecturl' => new external_value(PARAM_URL, 'URL to redirect to after enrollment', VALUE_OPTIONAL),
-            'message' => new external_value(PARAM_TEXT, 'Error message', VALUE_OPTIONAL)
+            'status' => new external_value(PARAM_BOOL, 'Status of the request'),
+            'url' => new external_value(PARAM_URL, 'The URL for the hosted payment page', VALUE_OPTIONAL),
+            'error' => new external_value(PARAM_TEXT, 'Error message', VALUE_OPTIONAL),
         ]);
-    }
-
-    /**
-     * Finalizes the payment and enrollment after the user completes the hosted form.
-     *
-     * @param int $instanceid The enrolment instance ID.
-     * @param string $dataDescriptor The data descriptor from the hosted form.
-     * @param string $dataValue The data value from the hosted form.
-     * @return array
-     */
-    public static function finalize_enrollment($instanceid, $dataDescriptor, $dataValue) {
-        global $CFG, $DB, $USER;
-
-        self::validate_context(context_user::instance($USER->id));
-
-        $instance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'authorizedotnet'], '*', MUST_EXIST);
-        $course = $DB->get_record('course', ['id' => $instance->courseid], '*', MUST_EXIST);
-
-        $paymentprocess = new \enrol_authorizedotnet_payment_process(
-            $instance->cost,
-            $course->id,
-            $USER->id,
-            $instance
-        );
-
-
-        try {
-            // Process the enrollment using the data from the hosted form.
-            $paymentprocess->finalize_enrollment($dataDescriptor, $dataValue);
-
-            // If we reach this point, both payment and enrollment were successful.
-            return [
-                'status' => true,
-                'redirecturl' => (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false)
-            ];
-
-        } catch (\Exception $e) {
-            $message = $e->getMessage();
-            return [
-                'status' => false,
-                'message' => $message
-            ];
-        }
     }
 }

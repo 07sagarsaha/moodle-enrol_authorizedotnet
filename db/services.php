@@ -12,42 +12,25 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Services definition for authorizedotnet.
+ * Authorize.Net enrolment plugin external functions.
  *
  * @package    enrol_authorizedotnet
- * @author     DualCube
- * @copyright  2024 DualCube
+ * @author     Your Name <your@email.com>
+ * @copyright  2025 Your Name
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
 $functions = [
-    'enrol_authorizedotnet_process_payment' => [
-        'classname'   => 'enrol_authorizedotnet_external',
-        'methodname'  => 'process_payment',
-        'classpath'   => 'enrol/authorizedotnet/externallib.php',
-        'description' => 'Process a payment for authorizedotnet enrolment.',
-        'type'        => 'write',
-        'ajax'        => true,
-    ],
-    'enrol_authorizedotnet_get_hosted_form_token' => [
-        'classname'   => 'enrol_authorizedotnet_external',
-        'methodname'  => 'get_hosted_form_token',
-        'classpath'   => 'enrol/authorizedotnet/externallib.php',
-        'description' => 'Generates a hosted payment form token for the client.',
-        'type'        => 'write',
-        'ajax'        => true,
-    ],
-    'enrol_authorizedotnet_finalize_enrollment' => [
-        'classname'   => 'enrol_authorizedotnet_external',
-        'methodname'  => 'finalize_enrollment',
-        'classpath'   => 'enrol/authorizedotnet/externallib.php',
-        'description' => 'Finalizes the enrollment after a successful payment.',
-        'type'        => 'write',
+    'enrol_authorizedotnet_get_hosted_payment_url' => [
+        'classname'   => 'enrol_authorizedotnet_externallib',
+        'methodname'  => 'get_hosted_payment_url',
+        'description' => 'Get the hosted payment page URL.',
+        'type'        => 'read',
         'ajax'        => true,
     ],
 ];
