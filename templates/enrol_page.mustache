@@ -47,13 +47,22 @@
         <strong id="totalamount-{{instanceid}}">{{currency}} {{cost}}</strong>
     </div>
 
-    <!-- Container for displaying payment response/errors -->
-    <div id="paymentresponse-{{instanceid}}" class="authorizedotnet-error-message" style="display: none;"></div>
+    <div id="paymentresponse-{{instanceid}}" class="authorizedotnet-error-message hidden"></div>
 
-    <!-- Single enrollment button that handles paid enrollment -->
     <div id="enrollmentbutton-{{instanceid}}">
         <button id="enrolbutton-{{instanceid}}" class="btn btn-primary">
             {{# str }} enrolnow, enrol_authorizedotnet {{/ str }}
         </button>
     </div>
 </div>
+
+<style>
+    /* Add this style block or put it in a separate CSS file */
+    .authorizedotnet-error-message.hidden {
+        display: none;
+    }
+    #enrolbutton-{{instanceid}}.processing {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+</style>

@@ -32,7 +32,7 @@ use core_external\external_single_structure;
 use moodle_url;
 
 require_once("$CFG->libdir/externallib.php");
-require_once("$CFG->dirroot/enrol/authorizedotnet/vendor/autoload.php");
+require_once('vendor/authorizenet/authorizenet/autoload.php');
 
 use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller as AnetController;
@@ -42,18 +42,17 @@ class enrol_authorizedotnet_externallib extends external_api {
     public static function get_hosted_payment_url_parameters() {
         return new external_function_parameters([
             'instanceid' => new external_value(PARAM_INT, 'Enrolment instance ID'),
+            'userid' => new external_value(PARAM_INT, 'The ID of the user to be enrolled'),
         ]);
     }
 
-    public static function get_hosted_payment_url($instanceid) {
-        global $CFG, $USER, $DB;
+    public static function get_hosted_payment_url($instanceid, $userid) {
+        global $DB;
 
-        self::validate_parameters(self::get_hosted_payment_url_parameters(), ['instanceid' => $instanceid]);
+        self::validate_parameters(self::get_hosted_payment_url_parameters(), ['instanceid' => $instanceid, 'userid' => $userid]);
 
         $instance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'authorizedotnet'], '*', MUST_EXIST);
         $course = $DB->get_record('course', ['id' => $instance->courseid], '*', MUST_EXIST);
-        $context = context_course::instance($course->id);
-        self::validate_context($context);
 
         if ((float) $instance->cost <= 0) {
             $plugin = enrol_get_plugin('authorizedotnet');
@@ -73,6 +72,11 @@ class enrol_authorizedotnet_externallib extends external_api {
         $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
         $merchantAuthentication->setName($plugin->get_config('loginid'));
         $merchantAuthentication->setTransactionKey($plugin->get_config('transactionkey'));
+        file_put_contents("/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
+            "LoginID: " . $plugin->get_config('loginid') .
+            " | TransactionKey: " . $plugin->get_config('transactionkey') . "\n",
+            FILE_APPEND
+        );
 
         // Create the transaction request.
         $transactionRequestType = new AnetAPI\TransactionRequestType();
@@ -81,7 +85,7 @@ class enrol_authorizedotnet_externallib extends external_api {
 
         $returnUrlParams = [
             'courseid' => $instance->courseid,
-            'userid' => $USER->id,
+            'userid' => $userid,
             'instanceid' => $instance->id,
             'sesskey' => sesskey(),
         ];
@@ -91,11 +95,18 @@ class enrol_authorizedotnet_externallib extends external_api {
         $setting1->setSettingName("hostedPaymentButtonOptions");
         $setting1->setSettingValue("{\"text\": \"Pay\"}");
 
+        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php', $returnUrlParams);
+        $cancelUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
+
         $setting2 = new AnetAPI\SettingType();
         $setting2->setSettingName("hostedPaymentReturnOptions");
-        $setting2->setSettingValue(
-            "{\"showReceipt\": true, \"url\": \"" . $returnUrl->out(false) . "\", \"urlText\": \"Continue to Course\", \"cancelUrl\": \"" . (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false) . "\", \"cancelUrlText\": \"Cancel\"}"
-        );
+        $setting2->setSettingValue(json_encode([
+            "showReceipt" => true,
+            "url" => $returnUrl->out(false),   // false = no escaping
+            "urlText" => "Continue to Course",
+            "cancelUrl" => $cancelUrl->out(false),
+            "cancelUrlText" => "Cancel"
+        ]));
 
         $setting3 = new AnetAPI\SettingType();
         $setting3->setSettingName("hostedPaymentPaymentOptions");
@@ -109,23 +120,45 @@ class enrol_authorizedotnet_externallib extends external_api {
         $request->addToHostedPaymentSettings($setting3);
 
         $controller = new AnetController\GetHostedPaymentPageController($request);
-        $endpoint = $plugin->get_config('checkproductionmode') ? \net\authorize\api\constants\ANetEnvironment::SANDBOX : \net\authorize\api\constants\ANetEnvironment::PRODUCTION;
+        $useSandbox = (bool)$plugin->get_config('checkproductionmode');
+
+        $endpoint = \net\authorize\api\constants\ANetEnvironment::SANDBOX ;
+        
+        // Execute the API call.
         $response = $controller->executeWithApiResponse($endpoint);
 
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
+        // Check for a valid response and token.
+        if ($response && $response->getMessages()->getResultCode() === "Ok") {
             $token = $response->getToken();
-            $formUrl = $plugin->get_config('checkproductionmode') ? 'https://test.authorize.net/payment/payment' : 'https://accept.authorize.net/payment/payment';
             
-            // Instead of a redirect, we return the URL to the JS.
+            // Log the successful token generation.
+            file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":session_params:  : " . var_export($token, true) . "\n", FILE_APPEND);
+
+            $formUrl = $useSandbox
+                ? 'https://test.authorize.net/payment/payment'
+                : 'https://accept.authorize.net/payment/payment';
+
             return [
                 'status' => true,
-                'url' => $formUrl . '?token=' . $token,
+                'url' => $formUrl . '?token=' . rawurlencode($token),
             ];
         } else {
+            // Log the detailed error from the API response for debugging.
             $errorMessages = $response->getMessages()->getMessage();
+            $errorMessageText = '';
+            if (is_array($errorMessages)) {
+                foreach ($errorMessages as $msg) {
+                    $errorMessageText .= 'Code: ' . $msg->getCode() . ', Text: ' . $msg->getText() . '; ';
+                }
+            } else {
+                $errorMessageText = 'An unknown API error occurred.';
+            }
+
+            file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":API Error: " . $errorMessageText . "\n", FILE_APPEND);
+
             return [
                 'status' => false,
-                'error' => get_string('errorheading', 'enrol_authorizedotnet') . $errorMessages[0]->getCode() . " " . $errorMessages[0]->getText(),
+                'error' => get_string('errorheading', 'enrol_authorizedotnet') . $errorMessageText,
             ];
         }
     }

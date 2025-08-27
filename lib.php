@@ -25,7 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once($CFG->dirroot . '/enrol/authorizedotnet/vendor/autoload.php');
+require_once('vendor/authorizenet/authorizenet/autoload.php');
 
 use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller as AnetController;
@@ -160,7 +160,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
 
         $body = $OUTPUT->render_from_template('enrol_authorizedotnet/enrol_page', $templatedata);
         
-        $PAGE->requires->js_call_amd('enrol_authorizedotnet/payment', 'init', [$instance->id]);
+        $PAGE->requires->js_call_amd('enrol_authorizedotnet/payment', 'authorizeNetPayment', [$instance->id, $USER->id]);
 
         $enrolpage = new enrol_page($instance, $name, $body);
         return $OUTPUT->render($enrolpage);
