@@ -157,10 +157,24 @@ class enrol_authorizedotnet_externallib extends external_api {
         $setting1->setSettingName("hostedPaymentButtonOptions");
         $setting1->setSettingValue("{\"text\": \"Pay Now\"}");
 
-        // Removed the hostedPaymentReturnOptions setting as it's no longer needed.
+        // Re-add the hostedPaymentReturnOptions setting to fix the CSP error.
+        $cancelUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
+        $returnUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
+
         $setting2 = new AnetAPI\SettingType();
-        $setting2->setSettingName("hostedPaymentPaymentOptions");
-        $setting2->setSettingValue("{\"cardCodeRequired\": false, \"showCreditCard\": true, \"showBankAccount\": false}");
+        $setting2->setSettingName("hostedPaymentReturnOptions");
+        $setting2->setSettingValue(json_encode([
+            "showReceipt" => true,
+            "url" => $returnUrl->out(false),
+            "urlText" => "Return to Course",
+            "cancelUrl" => $cancelUrl->out(false),
+            "cancelUrlText" => "Cancel and Return to Course"
+        ]));
+
+        // The third setting is now setting3.
+        $setting3 = new AnetAPI\SettingType();
+        $setting3->setSettingName("hostedPaymentPaymentOptions");
+        $setting3->setSettingValue("{\"cardCodeRequired\": false, \"showCreditCard\": true, \"showBankAccount\": false}");
 
         // Build the final request.
         $request = new AnetAPI\GetHostedPaymentPageRequest();
@@ -168,6 +182,7 @@ class enrol_authorizedotnet_externallib extends external_api {
         $request->setTransactionRequest($transactionRequestType);
         $request->addToHostedPaymentSettings($setting1);
         $request->addToHostedPaymentSettings($setting2);
+        $request->addToHostedPaymentSettings($setting3);
 
         $controller = new AnetController\GetHostedPaymentPageController($request);
         $useSandbox = !(bool)$plugin->get_config('checkproductionmode');
