@@ -41,51 +41,74 @@ use net\authorize\api\constants as ANetConstants;
 class enrol_authorizedotnet_externallib extends external_api {
 
     public static function ensure_webhook_exists() {
-        global $CFG;
-        $plugin = enrol_get_plugin('authorizedotnet');
+    global $CFG;
+    $plugin = enrol_get_plugin('authorizedotnet');
 
-        $loginId = $plugin->get_config('loginid');
-        $transactionKey = $plugin->get_config('transactionkey');
-        $useSandbox = !(bool)$plugin->get_config('checkproductionmode');
+    $useSandbox = !(bool)$plugin->get_config('checkproductionmode');
 
-        $endpoint = $useSandbox
-            ? "https://apitest.authorize.net/rest/v1/webhooks"
-            : "https://api.authorize.net/rest/v1/webhooks";
+    $endpoint = $useSandbox
+        ? "https://apitest.authorize.net/rest/v1/webhooks"
+        : "https://api.authorize.net/rest/v1/webhooks";
 
-        $webhookUrl = $CFG->wwwroot . '/enrol/authorizedotnet/webhook.php';
+    $webhookUrl = $CFG->wwwroot . '/enrol/authorizedotnet/webhook.php';
 
-        $payload = [
-            "name" => "Moodle AuthorizeNet Webhook",
-            "url" => $webhookUrl,
-            "eventTypes" => [
-                "net.authorize.payment.authcapture.created",
-                "net.authorize.payment.capture.created"
-            ],
-            "status" => "active"
-        ];
+    $payload = [
+        "name" => "Moodle AuthorizeNet Webhook",
+        "url" => $webhookUrl,
+        "eventTypes" => [
+            "net.authorize.payment.authcapture.created",
+            "net.authorize.payment.capture.created"
+        ],
+        "status" => "active"
+    ];
 
-        // Auth header (use HTTP Basic Auth with API login + key as base64)
-        $auth = base64_encode($loginId . ":" . $transactionKey);
+    $loginId = $plugin->get_config('loginid');
+    $transactionKey = $plugin->get_config('transactionkey');
 
-        $ch = curl_init($endpoint);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Content-Type: application/json",
-            "Authorization: Basic " . $auth
-        ]);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-
-        $response = curl_exec($ch);
-        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
+    if (empty($loginId) || empty($transactionKey)) {
         return [
-            'status' => ($httpcode === 200 || $httpcode === 201),
-            'response' => $response,
-            'httpcode' => $httpcode
+            'status' => false,
+            'response' => 'API Login ID or Transaction Key missing in plugin configuration',
+            'httpcode' => 0
         ];
     }
+
+    $auth = base64_encode($loginId . ":" . $transactionKey);
+    $headers = [
+        "Content-Type: application/json",
+        "Authorization: Basic " . $auth
+    ];
+
+    $ch = curl_init($endpoint);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+
+    $response = curl_exec($ch);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlerr = curl_error($ch);
+    curl_close($ch);
+
+    // Debug log
+    file_put_contents(
+        $CFG->dataroot . "/authorizedotnet_webhook_debug.log",
+        date("d/m/Y H:i:s") .
+        "\nENDPOINT: $endpoint" .
+        "\nHEADERS: " . var_export($headers, true) .
+        "\nPAYLOAD: " . json_encode($payload) .
+        "\nHTTP CODE: $httpcode" .
+        "\nCURL ERROR: $curlerr" .
+        "\nRESPONSE: $response\n\n",
+        FILE_APPEND
+    );
+
+    return [
+        'status' => ($httpcode === 200 || $httpcode === 201),
+        'response' => $response,
+        'httpcode' => $httpcode
+    ];
+}
 
     public static function get_hosted_payment_url_parameters() {
         return new external_function_parameters([
@@ -191,7 +214,8 @@ class enrol_authorizedotnet_externallib extends external_api {
         $response = $controller->executeWithApiResponse($endpoint);
 
         if ($response != null && $response->getMessages()->getResultCode() == "Ok") {
-            self::ensure_webhook_exists();
+            $webhook = self::ensure_webhook_exists();
+            file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":session_params:  : " . var_export($webhook, true) . "\n", FILE_APPEND);
             $token = $response->getToken();
             $formUrl = $useSandbox
                 ? 'https://test.authorize.net/payment/payment'
