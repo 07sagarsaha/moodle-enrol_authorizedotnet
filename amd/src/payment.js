@@ -54,7 +54,6 @@ const createDOM = (instanceid) => {
         toggleElement(id, show) {
             const element = this.getElement(id);
             if (element) {
-                // Fix for Content-Security-Policy error
                 element.classList.toggle("hidden", !show);
             }
         },
@@ -67,6 +66,26 @@ const createDOM = (instanceid) => {
             }
         }
     };
+};
+
+/**
+ * **NEW**: Function to create and submit a form dynamically.
+ * @param {string} url The URL to which the form will be submitted.
+ * @param {string} token The payment token from Authorize.Net.
+ */
+const postToUrl = (url, token) => {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = url;
+
+    const hiddenField = document.createElement('input');
+    hiddenField.type = 'hidden';
+    hiddenField.name = 'token';
+    hiddenField.value = token;
+
+    form.appendChild(hiddenField);
+    document.body.appendChild(form);
+    form.submit();
 };
 
 function authorizeNetPayment(instanceid, userid) {
@@ -95,11 +114,13 @@ function authorizeNetPayment(instanceid, userid) {
 
         try {
             const response = await getHostedPaymentUrl(instanceid, userid);
-            if (response?.status && response.url) {
-                window.location.href = response.url;
+            // **FIX**: Check for `formurl` and `token` instead of `url`.
+           if (response.status === true) {
+                postToUrl(response.formurl, response.token);
             } else {
-                displayError(response?.error || "Unable to initiate payment.");
-                DOM.setButton("enrolbutton", false, "Pay Now");
+                // Handle the error message
+                console.error(response.error);
+                // Display a user-friendly error
             }
         } catch (ex) {
             notification.exception(ex);

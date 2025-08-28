@@ -45,8 +45,3 @@ input.authorize-submit-button{
 .authorizedotnet-error-message.hidden {
     display: none;
 }
-
-[id^="enrolbutton-"][class~="processing"] {
-    opacity: 0.7;
-    cursor: not-allowed;
-}
