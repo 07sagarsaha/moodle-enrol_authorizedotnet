@@ -53,6 +53,7 @@ class enrol_authorizedotnet_externallib extends external_api {
 
         $instance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'authorizedotnet'], '*', MUST_EXIST);
         $course = $DB->get_record('course', ['id' => $instance->courseid], '*', MUST_EXIST);
+        $user = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
 
         if ((float) $instance->cost <= 0) {
             $plugin = enrol_get_plugin('authorizedotnet');
@@ -78,6 +79,21 @@ class enrol_authorizedotnet_externallib extends external_api {
         $transactionRequestType->setTransactionType("authCaptureTransaction");
         $transactionRequestType->setAmount($cost);
 
+        $customer = new AnetAPI\CustomerDataType();
+        $customer->setId($user->id);
+        $customer->setEmail($user->email);
+
+        $billTo = new AnetAPI\CustomerAddressType();
+        $billTo->setFirstName($user->firstname);
+        $billTo->setLastName($user->lastname);
+        $billTo->setAddress($user->address);
+        $billTo->setCity($user->city);
+        $billTo->setZip($user->postcode);
+        $billTo->setCountry($user->country);
+
+        $transactionRequestType->setCustomer($customer);
+        $transactionRequestType->setBillTo($billTo);
+
         $returnUrlParams = [
             'courseid' => $instance->courseid,
             'userid' => $userid,
@@ -90,7 +106,6 @@ class enrol_authorizedotnet_externallib extends external_api {
         $setting1->setSettingName("hostedPaymentButtonOptions");
         $setting1->setSettingValue("{\"text\": \"Pay\"}");
 
-        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php', $returnUrlParams);
         $cancelUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
 
         $setting2 = new AnetAPI\SettingType();
@@ -136,7 +151,7 @@ class enrol_authorizedotnet_externallib extends external_api {
 
             return [
                 'status' => true,
-                'url' => $formUrl . '?token=' . rawurlencode($token),
+                'url' => $formUrl . '?token=' . $token,
             ];
         } else {
             // Log the detailed error from the API response for debugging.
