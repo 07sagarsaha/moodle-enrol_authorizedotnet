@@ -40,75 +40,7 @@ use net\authorize\api\constants as ANetConstants;
 
 class enrol_authorizedotnet_externallib extends external_api {
 
-    public static function ensure_webhook_exists() {
-    global $CFG;
-    $plugin = enrol_get_plugin('authorizedotnet');
-
-    $useSandbox = !(bool)$plugin->get_config('checkproductionmode');
-
-    $endpoint = $useSandbox
-        ? "https://apitest.authorize.net/rest/v1/webhooks"
-        : "https://api.authorize.net/rest/v1/webhooks";
-
-    $webhookUrl = $CFG->wwwroot . '/enrol/authorizedotnet/webhook.php';
-
-    $payload = [
-        "name" => "Moodle AuthorizeNet Webhook",
-        "url" => $webhookUrl,
-        "eventTypes" => [
-            "net.authorize.payment.authcapture.created",
-            "net.authorize.payment.capture.created"
-        ],
-        "status" => "active"
-    ];
-
-    $loginId = $plugin->get_config('loginid');
-    $transactionKey = $plugin->get_config('transactionkey');
-
-    if (empty($loginId) || empty($transactionKey)) {
-        return [
-            'status' => false,
-            'response' => 'API Login ID or Transaction Key missing in plugin configuration',
-            'httpcode' => 0
-        ];
-    }
-
-    $auth = base64_encode($loginId . ":" . $transactionKey);
-    $headers = [
-        "Content-Type: application/json",
-        "Authorization: Basic " . $auth
-    ];
-
-    $ch = curl_init($endpoint);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-
-    $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerr = curl_error($ch);
-    curl_close($ch);
-
-    // Debug log
-    file_put_contents(
-        $CFG->dataroot . "/authorizedotnet_webhook_debug.log",
-        date("d/m/Y H:i:s") .
-        "\nENDPOINT: $endpoint" .
-        "\nHEADERS: " . var_export($headers, true) .
-        "\nPAYLOAD: " . json_encode($payload) .
-        "\nHTTP CODE: $httpcode" .
-        "\nCURL ERROR: $curlerr" .
-        "\nRESPONSE: $response\n\n",
-        FILE_APPEND
-    );
-
-    return [
-        'status' => ($httpcode === 200 || $httpcode === 201),
-        'response' => $response,
-        'httpcode' => $httpcode
-    ];
-}
+    
 
     public static function get_hosted_payment_url_parameters() {
         return new external_function_parameters([
@@ -149,11 +81,17 @@ class enrol_authorizedotnet_externallib extends external_api {
         $transactionRequestType->setTransactionType("authCaptureTransaction");
         $transactionRequestType->setAmount($cost);
 
-        // Add order information. The invoice number is critical for the webhook.
+        // Add order information.
         $order = new AnetAPI\OrderType();
-        $order->setInvoiceNumber($user->id . '-' . $course->id . '-' . time());
+        $invoiceNumber = $user->id . '-' . $course->id . '-' . time();
+        $order->setInvoiceNumber($invoiceNumber);
         $order->setDescription($course->fullname);
         $transactionRequestType->setOrder($order);
+
+        // Store the invoice number in the session to verify payment on return.
+        global $SESSION;
+        $SESSION->enrol_authorizedotnet_invoicenumber = $invoiceNumber;
+        $SESSION->enrol_authorizedotnet_instanceid = $instanceid;
 
         // Add customer data.
         $customer = new AnetAPI\CustomerDataType();
@@ -180,16 +118,16 @@ class enrol_authorizedotnet_externallib extends external_api {
         $setting1->setSettingName("hostedPaymentButtonOptions");
         $setting1->setSettingValue("{\"text\": \"Pay Now\"}");
 
-        // Re-add the hostedPaymentReturnOptions setting to fix the CSP error.
+        // Set up the return URL to our custom verification page.
         $cancelUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
-        $returnUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
+        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php', ['courseid' => $course->id]);
 
         $setting2 = new AnetAPI\SettingType();
         $setting2->setSettingName("hostedPaymentReturnOptions");
         $setting2->setSettingValue(json_encode([
             "showReceipt" => true,
             "url" => $returnUrl->out(false),
-            "urlText" => "Return to Course",
+            "urlText" => "Continue to Course",
             "cancelUrl" => $cancelUrl->out(false),
             "cancelUrlText" => "Cancel and Return to Course"
         ]));
@@ -214,8 +152,6 @@ class enrol_authorizedotnet_externallib extends external_api {
         $response = $controller->executeWithApiResponse($endpoint);
 
         if ($response != null && $response->getMessages()->getResultCode() == "Ok") {
-            $webhook = self::ensure_webhook_exists();
-            file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":session_params:  : " . var_export($webhook, true) . "\n", FILE_APPEND);
             $token = $response->getToken();
             $formUrl = $useSandbox
                 ? 'https://test.authorize.net/payment/payment'
