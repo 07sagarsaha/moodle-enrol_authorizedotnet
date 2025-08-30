@@ -201,45 +201,33 @@ function process_payment($userid, $instanceid) {
         $log("Transaction object is null");
     }
 
-    if ($tresponse && $tresponse->getResponseCode() == "1") { 
-         $status = strtolower($tresponse->getTransactionStatus()); 
-         $successStatuses = ['capturedpendingsettlement', 'settledsuccessfully']; 
+    if ($tresponse && $tresponse->getResponseCode() == "1") {
+        $status = strtolower($tresponse->getTransactionStatus());
+        $successStatuses = ['capturedpendingsettlement', 'settledsuccessfully'];
 
-         if (in_array($status, $successStatuses)) { 
-             $log("Payment successful. Status={$status}. Enrolling user={$userid} in course={$course->id}"); 
+        if (in_array($status, $successStatuses)) {
+            $log("Payment successful. Status={$status}. Enrolling user={$userid} in course={$course->id}");
 
-             // --- START: REPLACEMENT BLOCK ---
-             $data = new stdClass();
-             $creditcard = $tresponse->getPayment()->getCreditCard();
-             $billto = $tresponse->getBillTo();
-             $customer = $tresponse->getCustomer();
+            $data = new stdClass();
+            $data->item_name      = $course->fullname;
+            $data->courseid       = $course->id;
+            $data->userid         = $user->id;
+            $data->instanceid     = $instanceid;
+            $data->amount         = $tresponse->getSettleAmount() ?? $tresponse->getAuthAmount();
+            $data->payment_status = $tresponse->getTransactionStatus();
+            $data->trans_id       = $tresponse->getTransId();
+            $data->method         = $tresponse->getPayment()->getCreditCard()->getCardType() ?? '';
+            $data->account_number = $tresponse->getPayment()->getCreditCard()->getCardNumber() ?? '';
+            $data->timeupdated    = time();
 
-             $data->item_name            = $course->fullname;
-             $data->courseid             = $course->id;
-             $data->userid               = $user->id;
-             $data->instanceid           = $instanceid;
-             $data->amount               = $tresponse->getSettleAmount() ?? $tresponse->getAuthAmount();
-             $data->payment_status       = $tresponse->getTransactionStatus();
-             $data->response_code        = $tresponse->getResponseCode();
-             $data->response_reason_text = $tresponse->getMessages()[0]->getDescription() ?? '';
-             $data->auth_code            = $tresponse->getAuthCode();
-             $data->trans_id             = $tresponse->getTransId();
-             $data->method               = 'CC'; // A static value like 'CC' (Credit Card) is more suitable for the 'method' field (char(6)).
-             $data->account_number       = $creditcard ? $creditcard->getCardNumber() : '';
-             $data->card_type            = $creditcard ? $creditcard->getCardType() : ''; // This correctly uses the larger 'card_type' field (char(30)).
-             $data->invoice_num          = $invoicenumber; // It's important to save the invoice number used for the lookup.
-             $data->first_name           = $billto ? $billto->getFirstName() : '';
-             $data->last_name            = $billto ? $billto->getLastName() : '';
-             $data->email                = $customer ? $customer->getEmail() : '';
-             $data->timeupdated          = time();
-             enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $data); 
+            enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $data);
 
-             redirect(new moodle_url('/course/view.php', ['id' => $course->id]), 
-                      get_string('paymentthanks', '', $course->fullname)); 
-         } else { 
-             $log("Transaction approved but with non-success status={$status}. Not enrolling yet."); 
-             redirect($CFG->wwwroot, 'Transaction pending settlement'); 
-         }
+            redirect(new moodle_url('/course/view.php', ['id' => $course->id]),
+                     get_string('paymentthanks', '', $course->fullname));
+        } else {
+            $log("Transaction approved but with non-success status={$status}. Not enrolling yet.");
+            redirect($CFG->wwwroot, 'Transaction pending settlement');
+        }
     } else {
         $log("Transaction failed. Status=" . ($tresponse->getTransactionStatus() ?? 'N/A') .
              " ResponseCode=" . ($tresponse->getResponseCode() ?? 'N/A'));
@@ -250,8 +238,6 @@ function process_payment($userid, $instanceid) {
 // ========== DIRECT ACCESS ==========
 if (!AJAX_SCRIPT) {
     global $USER, $SESSION;
-    $transactionId = $_POST['transId'] ?? null;
-    file_put_contents( "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s", time()) . ":response:  : " . var_export($transactionId, true) . "\n", FILE_APPEND);
     file_put_contents(
         "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
         date("d/m/Y H:i:s") . " | USER->id=" . var_export($USER->id ?? null, true) .
