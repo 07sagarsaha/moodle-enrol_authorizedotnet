@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Authorize.Net enrolment plugin external functions.
+ * External functions and service definitions for the Authorize.net payment gateway plugin.
  *
  * @package    enrol_authorizedotnet
  * @author     Your Name <your@email.com>
