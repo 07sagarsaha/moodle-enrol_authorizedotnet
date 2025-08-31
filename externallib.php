@@ -120,7 +120,7 @@ class enrol_authorizedotnet_externallib extends external_api {
 
         // Set up the return URL to our custom verification page.
         $cancelUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
-        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php', ['courseid' => $course->id]);
+        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php');
 
         $setting2 = new AnetAPI\SettingType();
         $setting2->setSettingName("hostedPaymentReturnOptions");
