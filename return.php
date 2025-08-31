@@ -146,13 +146,32 @@ function process_payment($userid, $instanceid) {
 
     $log("Using environment=" . ($plugin->get_config('checkproductionmode') ? "PRODUCTION" : "SANDBOX"));
 
-    // Retrieve the transaction ID and invoice number from the POST data sent by Authorize.Net.
-    $transid = filter_input(INPUT_POST, 'x_trans_id', FILTER_SANITIZE_STRING);
-    $postedInvoice = filter_input(INPUT_POST, 'x_invoice_num', FILTER_SANITIZE_STRING);
+    // Fetch unsettled transactions to find our transaction ID.
+    $request = new AnetAPI\GetUnsettledTransactionListRequest();
+    $request->setMerchantAuthentication($merchantAuth);
+    $controller = new AnetController\GetUnsettledTransactionListController($request);
+    $response = $controller->executeWithApiResponse($environment);
 
-    // Security check: Ensure the invoice number from the POST data matches the one stored in the session.
-    if (empty($transid) || $postedInvoice !== $invoicenumber) {
-        $log("Mismatched invoice number or missing transaction ID {$transid}. Expected={$invoicenumber}, Received=" . ($postedInvoice ?? 'NULL'));
+    $transid = null;
+    if ($response != null && $response->getMessages()->getResultCode() == "Ok") {
+        if ($response->getTransactions() != null) {
+            $matching_transaction = current(array_filter($response->getTransactions(), function($transaction) use ($invoicenumber) {
+                return $transaction->getInvoiceNumber() == $invoicenumber;
+            }));
+
+            if ($matching_transaction) {
+                $transid = $matching_transaction->getTransId();
+                $log("Found matching transaction. TransID={$transid} for Invoice={$invoicenumber}");
+            }
+        }
+    } else {
+        $errorMessages = $response->getMessages()->getMessage();
+        $log("Failed to get unsettled transactions. Error code: " . $errorMessages[0]->getCode() . " Error message: " . $errorMessages[0]->getText());
+        redirect($CFG->wwwroot, 'Could not retrieve transaction list.');
+    }
+
+    if (empty($transid)) {
+        $log("Could not find transaction for invoice number: {$invoicenumber}");
         redirect($CFG->wwwroot, 'Invalid transaction data.');
     }
 
@@ -208,7 +227,7 @@ function process_payment($userid, $instanceid) {
              $data->amount               = $tresponse->getSettleAmount() ?? $tresponse->getAuthAmount();
              $data->payment_status       = $tresponse->getTransactionStatus();
              $data->response_code        = $tresponse->getResponseCode();
-             $data->response_reason_text = $tresponse->getMessages()[0]->getDescription() ?? '';
+             $data->response_reason_text = $tresponse->getResponseReasonDescription() ?? '';
              $data->auth_code            = $tresponse->getAuthCode();
              $data->trans_id             = $tresponse->getTransId();
              $data->method               = 'CC'; // A static value like 'CC' (Credit Card) is more suitable for the 'method' field (char(6)).
