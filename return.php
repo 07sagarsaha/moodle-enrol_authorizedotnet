@@ -1,5 +1,5 @@
 <?php
-file_put_contents("/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log", date("d/m/Y H:i:s") . " | POST at top of return.php: " . json_encode("$_POST") . "\n", FILE_APPEND);
+file_put_contents("/home/demo/public_html/moodledemo/enrol/authorizedotnetpro/error.log", date("d/m/Y H:i:s") . " | POST at top of return.php: " . json_encode("$_POST") . "\n", FILE_APPEND);
 // This file is part of Moodle - http://moodle.org/
 // GPL header omitted for brevity
 
@@ -16,94 +16,7 @@ use net\authorize\api\constants as ANetConstants;
 require_once(__DIR__ . '/vendor/authorizenet/authorizenet/autoload.php');
 
 // ========== HELPERS ==========
-function enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $enrollmentdata) {
-    global $DB;
-    $plugin = enrol_get_plugin('authorizedotnet');
-    $DB->insert_record('enrol_authorizedotnet', $enrollmentdata);
-    $timestart = time();
-    $timeend = $plugininstance->enrolperiod ? $timestart + $plugininstance->enrolperiod : 0;
-    $plugin->enrol_user($plugininstance, $user->id, $plugininstance->roleid, $timestart, $timeend);
-    send_enrollment_notifications($course, $context, $user, $plugin);
-    return true;
-}
 
-function send_message_custom($course, $userfrom, $userto, $subject, $orderdetails, $shortname, $fullmessage, $fullmessagehtml) {
-    $recipients = is_array($userto) ? $userto : [$userto];
-    foreach ($recipients as $recipient) {
-        $message = new \core\message\message();
-        $message->courseid = $course->id;
-        $message->component = 'enrol_authorizedotnet';
-        $message->name = 'authorizedotnet_enrolment';
-        $message->userfrom = $userfrom;
-        $message->userto = $recipient;
-        $message->subject = $subject;
-        $message->fullmessage = $fullmessage;
-        $message->fullmessageformat = FORMAT_PLAIN;
-        $message->fullmessagehtml = $fullmessagehtml;
-        $message->smallmessage = get_string('newenrolment', 'enrol_authorizedotnet', $shortname);
-        $message->notification = 1;
-        $message->contexturl = new moodle_url('/course/view.php', ['id' => $course->id]);
-        $message->contexturlname = $orderdetails->coursename;
-        message_send($message);
-    }
-}
-
-function send_enrollment_notifications($course, $context, $user, $plugin) {
-    global $CFG;
-    $teacher = false;
-    if ($users = get_users_by_capability($context, 'moodle/course:update', 'u.*', 'u.id ASC', '', '', '', '', false, true)) {
-        $users = sort_by_roleassignment_authority($users, $context);
-        $teacher = array_shift($users);
-    }
-
-    $mailstudents = $plugin->get_config('mailstudents');
-    $mailteachers = $plugin->get_config('mailteachers');
-    $mailadmins   = $plugin->get_config('mailadmins');
-
-    $shortname = format_string($course->shortname, true, ['context' => $context]);
-    $coursecontext = context_course::instance($course->id);
-    $orderdetails = new stdClass();
-    $orderdetails->coursename = format_string($course->fullname, true, ['context' => $coursecontext]);
-
-    $sitename = $CFG->sitename;
-
-    if (!empty($mailstudents)) {
-        $userfrom = empty($teacher) ? core_user::get_noreply_user() : $teacher;
-        $fullmessage = get_string('welcometocoursetext', 'enrol_authorizedotnet', [
-            'course' => $course->fullname,
-            'sitename' => $sitename,
-        ]);
-        $subject = get_string('enrolmentuser', 'enrol_authorizedotnet', $shortname);
-        send_message_custom($course, $userfrom, $user, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
-    }
-
-    if (!empty($mailteachers) && !empty($teacher)) {
-        $fullmessage = get_string('adminmessage', 'enrol_authorizedotnet', [
-            'username' => fullname($user),
-            'course' => $course->fullname,
-            'sitename' => $sitename
-        ]);
-        $subject = get_string('enrolmentnew', 'enrol_authorizedotnet', [
-            'username' => fullname($user),
-            'course' => $course->fullname,
-        ]);
-        send_message_custom($course, $user, $teacher, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
-    }
-
-    if (!empty($mailadmins)) {
-        $admins = get_admins();
-        $fullmessage = get_string('adminmessage', 'enrol_authorizedotnet', [
-            'username' => fullname($user),
-            'course' => $course->fullname,
-            'sitename' => $sitename
-        ]);
-        $subject = get_string('enrolmentnew', 'enrol_authorizedotnet', [
-            'username' => fullname($user),
-            'course' => $course->fullname,
-        ]);
-        send_message_custom($course, $user, $admins, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
-    }
-}
 
 // ========== PROCESS PAYMENT ==========
 function process_payment($userid, $instanceid) {
@@ -238,7 +151,7 @@ function process_payment($userid, $instanceid) {
              $data->last_name            = $billto ? $billto->getLastName() : '';
              $data->email                = $customer ? $customer->getEmail() : '';
              $data->timeupdated          = time();
-             enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $data); 
+             $plugin->enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $data); 
 
              redirect(new moodle_url('/course/view.php', ['id' => $course->id]), 
                       get_string('paymentthanks', '', $course->fullname)); 
