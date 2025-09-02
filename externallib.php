@@ -101,8 +101,41 @@ class enrol_authorizedotnet_externallib extends external_api {
         if ($response['success']) {
             $success = true;
             $context = context_course::instance($courseid);
+            file_put_contents(
+                "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
+                date("d/m/Y H:i:s", time()) . " : response : " . var_export($response, true) . "\n",
+                FILE_APPEND
+            );
 
             try {
+                // Save transaction record to the database.
+                $transactiondata = new \stdClass();
+                $transactiondata->amount = (string) $cost;
+                $transactiondata->payment_status = $response['status'];
+                $transactiondata->response_code = isset($response['response_code']) ? (int) $response['response_code'] : 0;
+                $transactiondata->response_reason_code = isset($response['response_reason_code']) ? (int) $response['response_reason_code'] : 0;
+                $transactiondata->response_reason_text = $response['response_reason_text'] ?? '';
+                $transactiondata->auth_code = substr($response['auth_code'] ?? '', 0, 30);
+                $transactiondata->trans_id = $response['transactionid'];
+                $transactiondata->invoice_num = $response['invoice_num'] ?? '';
+                $transactiondata->test_request = (int) $plugin->get_config('checkproductionmode');
+                $transactiondata->first_name = $user->firstname ?? '';
+                $transactiondata->last_name = $user->lastname ?? '';
+                $transactiondata->company = $user->institution ?? '';
+                $transactiondata->phone = $user->phone1 ?? '';
+                $transactiondata->email = $user->email ?? '';
+                $transactiondata->address = $user->address ?? '';
+                $transactiondata->city = $user->city ?? '';
+                $transactiondata->zip = $user->zip ?? '';
+                $transactiondata->country = $user->country ?? '';
+                file_put_contents(
+                    "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
+                    date("d/m/Y H:i:s", time()) . " : transactiondata : " . var_export($transactiondata, true) . "\n",
+                    FILE_APPEND
+                );
+
+                $DB->insert_record('enrol_authorizedotnet', $transactiondata);
+                // Enroll the user and send notifications.
                 $data = new \stdClass();
                 $data->courseid = $course->id;
                 $data->userid = $user->id;
@@ -117,6 +150,7 @@ class enrol_authorizedotnet_externallib extends external_api {
                 $success = false;
                 $message = 'Internal error during enrollment.';
             }
+
         } else {
             $success = false;
             $message = $response['message'];

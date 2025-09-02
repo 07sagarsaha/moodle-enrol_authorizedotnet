@@ -92,11 +92,15 @@ class authorizedotnet_helper {
         }
 
         $tresponse = $response->getTransactionResponse();
-        if ($tresponse && $tresponse->getResponseCode() === "1") {
+        if ($tresponse && $tresponse->getResponseCode() === "1") {            
+            $message = $tresponse->getMessages()[0]; // First message object
             return [
-                'success'       => true,
-                'transactionid' => $tresponse->getTransId(),
-                'status'        => $tresponse->getMessages()[0]->getDescription(),
+                'success'              => true,
+                'transactionid'        => $tresponse->getTransId(),
+                'status'               => $message->getDescription(),
+                'response_code'        => $tresponse->getResponseCode(),
+                'response_reason_code' => $message->getCode(),
+                'auth_code'            => $tresponse->getAuthCode(),
             ];
         }
 
