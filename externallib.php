@@ -101,11 +101,7 @@ class enrol_authorizedotnet_externallib extends external_api {
         if ($response['success']) {
             $success = true;
             $context = context_course::instance($courseid);
-            file_put_contents(
-                "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
-                date("d/m/Y H:i:s", time()) . " : response : " . var_export($response, true) . "\n",
-                FILE_APPEND
-            );
+            debugging('Authorize.net response: ' . var_export($response, true), DEBUG_DEVELOPER);
 
             try {
                 // Save transaction record to the database.
@@ -128,11 +124,7 @@ class enrol_authorizedotnet_externallib extends external_api {
                 $transactiondata->city = $user->city ?? '';
                 $transactiondata->zip = $user->zip ?? '';
                 $transactiondata->country = $user->country ?? '';
-                file_put_contents(
-                    "/home/demo/public_html/moodledemo/enrol/authorizedotnet/error.log",
-                    date("d/m/Y H:i:s", time()) . " : transactiondata : " . var_export($transactiondata, true) . "\n",
-                    FILE_APPEND
-                );
+                debugging('Authorize.net transaction data: ' . var_export($transactiondata, true), DEBUG_DEVELOPER);
 
                 $DB->insert_record('enrol_authorizedotnet', $transactiondata);
                 // Enroll the user and send notifications.
@@ -148,7 +140,7 @@ class enrol_authorizedotnet_externallib extends external_api {
             } catch (\Exception $e) {
                 debugging('Exception while trying to process payment: ' . $e->getMessage(), DEBUG_DEVELOPER);
                 $success = false;
-                $message = 'Internal error during enrollment.';
+                $message = 'Internal error during enrollment: ' . $e->getMessage();
             }
 
         } else {

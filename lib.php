@@ -294,7 +294,6 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
     public function enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $enrollmentdata) {
         global $DB;
         $plugin = enrol_get_plugin('authorizedotnet');
-        $DB->insert_record('enrol_authorizedotnet', $enrollmentdata);
         $timestart = time();
         $timeend = $plugininstance->enrolperiod ? $timestart + $plugininstance->enrolperiod : 0;
         $plugin->enrol_user($plugininstance, $user->id, $plugininstance->roleid, $timestart, $timeend);

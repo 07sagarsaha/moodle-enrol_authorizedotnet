@@ -31,7 +31,7 @@ function xmldb_enrol_authorizedotnet_upgrade($oldversion) {
 
     // The version number should be greater than the last version in install.xml
     // and any previous upgrade scripts. We will use a version after the one you provided.
-    if ($oldversion < 2025083109) {
+    if ($oldversion < 2025083110) {
 
         // Define table enrol_authorizedotnet to be modified.
         $table = new xmldb_table('enrol_authorizedotnet');
@@ -70,9 +70,13 @@ function xmldb_enrol_authorizedotnet_upgrade($oldversion) {
             $dbman->change_field_precision($table, $field);
         }
 
+        $field = new xmldb_field('payment_status', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->change_field_precision($table, $field);
+        }
 
         // Update plugin version.
-        upgrade_plugin_savepoint(true, 2025083109, 'enrol', 'authorizedotnet');
+        upgrade_plugin_savepoint(true, 2025083110, 'enrol', 'authorizedotnet');
     }
 
     return true;
