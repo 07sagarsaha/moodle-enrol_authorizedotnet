@@ -106,8 +106,22 @@ class enrol_authorizedotnet_externallib extends external_api {
             try {
                 // Save transaction record to the database.
                 $transactiondata = new \stdClass();
+                $transactiondata->item_name = $course->fullname;
+                $transactiondata->courseid = $courseid;
+                $transactiondata->userid = $userid;
+                $transactiondata->instanceid = $instanceid;
                 $transactiondata->amount = (string) $cost;
-                $transactiondata->payment_status = $response['status'];
+                if ($response['response_code'] == 1) {
+                    $transactiondata->payment_status = 'approved';
+                } else if ($response['response_code'] == 2) {
+                    $transactiondata->payment_status = 'declined';
+                } else if ($response['response_code'] == 3) {
+                    $transactiondata->payment_status = 'error';
+                } else if ($response['response_code'] == 4) {
+                    $transactiondata->payment_status = 'held';
+                } else {
+                    $transactiondata->payment_status = 'unknown';
+                }
                 $transactiondata->response_code = isset($response['response_code']) ? (int) $response['response_code'] : 0;
                 $transactiondata->response_reason_code = isset($response['response_reason_code']) ? (int) $response['response_reason_code'] : 0;
                 $transactiondata->response_reason_text = $response['response_reason_text'] ?? '';
@@ -124,6 +138,7 @@ class enrol_authorizedotnet_externallib extends external_api {
                 $transactiondata->city = $user->city ?? '';
                 $transactiondata->zip = $user->zip ?? '';
                 $transactiondata->country = $user->country ?? '';
+                $transactiondata->auth_json = json_encode($response);
                 debugging('Authorize.net transaction data: ' . var_export($transactiondata, true), DEBUG_DEVELOPER);
 
                 $DB->insert_record('enrol_authorizedotnet', $transactiondata);
