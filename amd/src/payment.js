@@ -1,136 +1,126 @@
-// This file is part of Moodle - http://moodle.org/
-//
-// Moodle is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// Moodle is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+import Ajax from "core/ajax";
+import Templates from "core/templates";
+import Modal from "core/modal";
+import ModalEvents from "core/modal_events";
+import { getString } from "core/str";
+import Notification from "core/notification";
 
-/**
- * External library for Authorize.Net payment
- *
- * @package    enrol_authorizedotnet
- * @author     Your Name
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-import ajax from "core/ajax";
-import notification from "core/notification";
-
-const { call: fetchMany } = ajax;
+const { call: fetchMany } = Ajax;
 
 // Repository function
-const getHostedPaymentUrl = (instanceid, userid) =>
+const getConfigForJs = (instanceid) =>
     fetchMany([{
-        methodname: "enrol_authorizedotnet_get_hosted_payment_url",
-        args: { instanceid ,userid }
+        methodname: "enrol_authorizedotnet_get_config_for_js",
+        args: { instanceid },
     }])[0];
 
-// DOM helper
-const createDOM = (instanceid) => {
-    const cache = new Map();
-    return {
-        getElement(id) {
-            const fullid = `${id}-${instanceid}`;
-            if (!cache.has(fullid)) {
-                cache.set(fullid, document.getElementById(fullid));
-            }
-            return cache.get(fullid);
+const processPayment = (instanceid, userid, opaqueData) =>
+    fetchMany([{
+        methodname: "enrol_authorizedotnet_process_payment",
+        args: {
+            instanceid,
+            userid,
+            opaquedata: JSON.stringify(opaqueData),
         },
-        setText(id, text) {
-            const element = this.getElement(id);
-            if (element) {
-                element.textContent = text;
-            }
-        },
-        toggleElement(id, show) {
-            const element = this.getElement(id);
-            if (element) {
-                element.classList.toggle("hidden", !show);
-            }
-        },
-        setButton(id, disabled, text) {
-            const button = this.getElement(id);
-            if (button) {
-                button.disabled = disabled;
-                button.textContent = text;
-                button.classList.toggle("processing", disabled); // Use a class for styles
-            }
+    }])[0];
+
+const switchSdk = (environment) => {
+    const sdkUrl = (environment === 'sandbox')
+        ? 'https://jstest.authorize.net/v3/AcceptUI.js'
+        : 'https://js.authorize.net/v3/AcceptUI.js';
+
+    if (switchSdk.currentlyloaded === sdkUrl) {
+        return Promise.resolve();
+    }
+
+    if (switchSdk.currentlyloaded) {
+        const suspectedScript = document.querySelector(`script[src="${switchSdk.currentlyloaded}"]`);
+        if (suspectedScript) {
+            suspectedScript.parentNode.removeChild(suspectedScript);
         }
-    };
+    }
+
+    const script = document.createElement('script');
+    return new Promise(resolve => {
+        script.onload = () => resolve();
+        script.setAttribute('src', sdkUrl);
+        script.setAttribute('charset', 'utf-8');
+        document.head.appendChild(script);
+        switchSdk.currentlyloaded = sdkUrl;
+    });
 };
-
-/**
- * **NEW**: Function to create and submit a form dynamically.
- * @param {string} url The URL to which the form will be submitted.
- * @param {string} token The payment token from Authorize.Net.
- */
-const postToUrl = (url, token) => {
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.action = url;
-
-    const hiddenField = document.createElement('input');
-    hiddenField.type = 'hidden';
-    hiddenField.name = 'token';
-    hiddenField.value = token;
-
-    form.appendChild(hiddenField);
-    document.body.appendChild(form);
-    form.submit();
-};
+switchSdk.currentlyloaded = '';
 
 function authorizeNetPayment(instanceid, userid) {
-    const DOM = createDOM(instanceid);
-
-    const enrolButton = DOM.getElement("enrolbutton");
-    const paymentResponse = DOM.getElement("paymentresponse");
-
-    // Add the hidden class to the error message div initially
-    if (paymentResponse) {
-        paymentResponse.classList.add("hidden");
+    const enrolButton = document.getElementById(`enrolbutton-${instanceid}`);
+    if (!enrolButton) {
+        return;
     }
 
-    const displayError = (message) => {
-        if (paymentResponse) {
-            DOM.setText("paymentresponse", message);
-            DOM.toggleElement("paymentresponse", true);
-        }
-    };
-
-    const handlePayment = async () => {
-        if (!enrolButton) return;
-
-        DOM.setButton("enrolbutton", true, "Processing...");
-        DOM.toggleElement("paymentresponse", false);
-
+    enrolButton.addEventListener("click", async () => {
+        let modal;
         try {
-            const response = await getHostedPaymentUrl(instanceid, userid);
-            // **FIX**: Check for `formurl` and `token` instead of `url`.
-           if (response.status === true) {
-                postToUrl(response.formurl, response.token);
-            } else {
-                // Handle the error message
-                console.error(response.error);
-                // Display a user-friendly error
-            }
-        } catch (ex) {
-            notification.exception(ex);
-            DOM.setButton("enrolbutton", false, "Pay Now");
-        }
-    };
+            // 1. Get the config from the server.
+            const config = await getConfigForJs(instanceid);
 
-    if (enrolButton) {
-        enrolButton.addEventListener("click", handlePayment);
-    }
+            // 2. Render the button template into HTML.
+            const body = await Templates.render(
+                'enrol_authorizedotnet/authorizedotnet_button',
+                {
+                    apiloginid: config.apiloginid,
+                    clientkey: config.publicclientkey,
+                }
+            );
+
+            // 3. Create the modal and wait for it to be fully rendered.
+            modal = await Modal.create({
+                title: getString("pluginname", "enrol_authorizedotnet"),
+                body: body,
+                show: true,
+                removeOnClose: true,
+            });
+
+            // 4. NOW load the SDK after the button is in the DOM.
+            await switchSdk(config.environment);
+
+            // 5. Define the response handler for the SDK.
+            window.responseHandler = function (response) {
+                // Prevent outside clicks while processing.
+                modal.getRoot().on(ModalEvents.outsideClick, (e) => e.preventDefault());
+
+                if (response.messages.resultCode === "Error") {
+                    let errorMessages = '';
+                    for (let i = 0; i < response.messages.message.length; i++) {
+                        errorMessages += response.messages.message[i].text + '\n';
+                    }
+                    Notification.alert(getString('error', 'moodle'), errorMessages);
+                    modal.hide();
+                    return;
+                }
+                modal.setBody(getString('authorising', 'enrol_authorizedotnet'));
+
+                processPayment(instanceid, userid, response.opaqueData)
+                    .then((res) => {
+                        modal.hide();
+                        if (res.success) {
+                            window.location.reload();
+                        } else {
+                            Notification.alert(getString('error', 'moodle'), res.message);
+                        }
+                    })
+                    .catch((err) => {
+                        Notification.exception(err);
+                        modal.hide();
+                    });
+            };
+
+        } catch (err) {
+            Notification.exception(err);
+            if (modal) {
+                modal.hide();
+            }
+        }
+    });
 }
 
 export default {

@@ -13,7 +13,7 @@
         <FIELD NAME="amount" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="tax" TYPE="char" LENGTH="255" NOTNULL="false" DEFAULT="00.00" SEQUENCE="false"/>
         <FIELD NAME="duty" TYPE="char" LENGTH="255" NOTNULL="false" DEFAULT="00.00" SEQUENCE="false"/>
-        <FIELD NAME="payment_status" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="payment_status" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="response_code" TYPE="int" LENGTH="1" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="response_reason_code" TYPE="int" LENGTH="1" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="response_reason_text" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>

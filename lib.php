@@ -298,7 +298,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $timestart = time();
         $timeend = $plugininstance->enrolperiod ? $timestart + $plugininstance->enrolperiod : 0;
         $plugin->enrol_user($plugininstance, $user->id, $plugininstance->roleid, $timestart, $timeend);
-        send_enrollment_notifications($course, $context, $user, $plugin);
+        self::send_enrollment_notifications($course, $context, $user, $plugin);
         return true;
     }
 
@@ -349,7 +349,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'sitename' => $sitename,
             ]);
             $subject = get_string('enrolmentuser', 'enrol_authorizedotnet', $shortname);
-            send_message_custom($course, $userfrom, $user, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom($course, $userfrom, $user, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
         }
 
         if (!empty($mailteachers) && !empty($teacher)) {
@@ -362,7 +362,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'username' => fullname($user),
                 'course' => $course->fullname,
             ]);
-            send_message_custom($course, $user, $teacher, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom($course, $user, $teacher, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
         }
 
         if (!empty($mailadmins)) {
@@ -376,7 +376,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'username' => fullname($user),
                 'course' => $course->fullname,
             ]);
-            send_message_custom($course, $user, $admins, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom($course, $user, $admins, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
         }
     }
 }

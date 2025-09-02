@@ -34,7 +34,9 @@ if ($ADMIN->fulltree) {
                    get_string('loginid', 'enrol_authorizedotnet'), '', '', PARAM_RAW));
     $settings->add(new admin_setting_configtext('enrol_authorizedotnet/transactionkey',
                    get_string('transactionkey', 'enrol_authorizedotnet'), '', '', PARAM_RAW));
-    $settings->add(new admin_setting_configcheckbox('enrol_authorizedotnet/checkproductionmode',
+    $settings->add(new admin_setting_configtext('enrol_authorizedotnet/publicclientkey',
+                   get_string('publicclientkey', 'enrol_authorizedotnet'), '', '', PARAM_RAW));
+                   $settings->add(new admin_setting_configcheckbox('enrol_authorizedotnet/checkproductionmode',
                    get_string('checkproductionmode', 'enrol_authorizedotnet'), '', 0));
     $settings->add(new admin_setting_configcheckbox('enrol_authorizedotnet/mailstudents',
                    get_string('mailstudents', 'enrol_authorizedotnet'), '', 0));

@@ -28,157 +28,110 @@ defined('MOODLE_INTERNAL') || die();
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_value;
-use core_external\external_single_structure;
-use moodle_url;
+use core_payment\helper as payment_helper;
 
+require_once(__DIR__ . '/authorizedotnet_helper.php');
 require_once("$CFG->libdir/externallib.php");
-require_once('vendor/authorizenet/authorizenet/autoload.php');
-
-use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\controller as AnetController;
-use net\authorize\api\constants as ANetConstants;
 
 class enrol_authorizedotnet_externallib extends external_api {
 
-    
-
-    public static function get_hosted_payment_url_parameters() {
+    public static function get_config_for_js_parameters() {
         return new external_function_parameters([
             'instanceid' => new external_value(PARAM_INT, 'Enrolment instance ID'),
-            'userid' => new external_value(PARAM_INT, 'The ID of the user to be enrolled'),
         ]);
     }
 
-    public static function get_hosted_payment_url($instanceid, $userid) {
-        global $DB, $CFG;
+    public static function get_config_for_js($instanceid) {
+        global $DB;
+        self::validate_parameters(self::get_config_for_js_parameters(), ['instanceid' => $instanceid]);
+        $plugin = enrol_get_plugin('authorizedotnet');
+        return [
+            'apiloginid' => $plugin->get_config('loginid'),
+            'publicclientkey' => $plugin->get_config('publicclientkey'),
+            'environment' => $plugin->get_config('checkproductionmode') ? 'sandbox' : 'production',
+        ];
+    }
 
-        self::validate_parameters(self::get_hosted_payment_url_parameters(), ['instanceid' => $instanceid, 'userid' => $userid]);
-        $instance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'authorizedotnet'], '*', MUST_EXIST);
-        $course = $DB->get_record('course', ['id' => $instance->courseid], '*', MUST_EXIST);
-        $user = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
+    public static function get_config_for_js_returns() {
+        return new external_function_parameters([
+            'apiloginid' => new external_value(PARAM_RAW, 'The API login ID for the gateway.'),
+            'publicclientkey' => new external_value(PARAM_RAW, 'The public client key for the gateway.'),
+            'environment' => new external_value(PARAM_RAW, 'The environment (sandbox or production).'),
+        ]);
+    }
 
-        // Determine the payment cost.
-        $cost = (float) $instance->cost;
+    public static function process_payment_parameters() {
+        return new external_function_parameters([
+            'instanceid' => new external_value(PARAM_INT, 'The enrolment instance ID'),
+            'userid' => new external_value(PARAM_INT, 'The user ID'),
+            'opaquedata' => new external_value(PARAM_RAW, 'The opaque data from Authorize.net'),
+        ]);
+    }
+
+    public static function process_payment(int $instanceid, int $userid, string $opaquedata): array {
+        global $USER, $DB;
+
+        self::validate_parameters(self::process_payment_parameters(), [
+            'instanceid' => $instanceid,
+            'userid' => $userid,
+            'opaquedata' => $opaquedata,
+        ]);
+
+        $opaquedataobject = json_decode($opaquedata);
+        $plugin = enrol_get_plugin('authorizedotnet');
+        $cost = (float) $DB->get_field('enrol', 'cost', ['id' => $instanceid]);
         if ($cost <= 0) {
-            $plugin = enrol_get_plugin('authorizedotnet');
             $cost = (float) $plugin->get_config('cost');
         }
 
-        if (abs($cost) < 0.01) {
-            return [
-                'status' => false,
-                'error' => get_string('nocost', 'enrol_authorizedotnet'),
-            ];
-        }
+        $user = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
+        $courseid = $DB->get_field('enrol', 'courseid', ['id' => $instanceid]);
+        $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
 
-        $plugin = enrol_get_plugin('authorizedotnet');
-        $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
-        $merchantAuthentication->setName($plugin->get_config('loginid'));
-        $merchantAuthentication->setTransactionKey($plugin->get_config('transactionkey'));
+        $helper = new \enrol_authorizedotnet\authorizedotnet_helper(
+            $plugin->get_config('loginid'),
+            $plugin->get_config('transactionkey'),
+            $plugin->get_config('checkproductionmode')
+        );
 
-        // Create the transaction request.
-        $transactionRequestType = new AnetAPI\TransactionRequestType();
-        $transactionRequestType->setTransactionType("authCaptureTransaction");
-        $transactionRequestType->setAmount($cost);
+        $response = $helper->create_transaction($cost, 'USD', $opaquedataobject, $user, $course);
+        $success = false;
+        $message = '';
 
-        // Add order information.
-        $order = new AnetAPI\OrderType();
-        $invoiceNumber = $user->id . '-' . $course->id . '-' . time();
-        $order->setInvoiceNumber($invoiceNumber);
-        $order->setDescription($course->fullname);
-        $transactionRequestType->setOrder($order);
+        if ($response['success']) {
+            $success = true;
+            $context = context_course::instance($courseid);
 
-        // Store the invoice number in the session to verify payment on return.
-        global $SESSION;
-        $SESSION->enrol_authorizedotnet_invoicenumber = $invoiceNumber;
-        $SESSION->enrol_authorizedotnet_instanceid = $instanceid;
-
-        // Add customer data.
-        $customer = new AnetAPI\CustomerDataType();
-        $customer->setId($user->id);
-        $customer->setEmail($user->email);
-
-        // Add billing information.
-        $billTo = new AnetAPI\CustomerAddressType();
-        $billTo->setFirstName($user->firstname);
-        $billTo->setLastName($user->lastname);
-        $billTo->setCompany(!empty($user->institution) ? $user->institution : '');
-        $billTo->setAddress(!empty($user->address) ? $user->address : 'N/A');
-        $billTo->setCity(!empty($user->city) ? $user->city : 'N/A');
-        $billTo->setZip(!empty($user->zip) ? $user->zip : '00000');
-        $billTo->setCountry(!empty($user->country) ? $user->country : 'US');
-        $billTo->setPhoneNumber(!empty($user->phone1) ? $user->phone1 : '');
-        $billTo->setEmail($user->email);
-
-        $transactionRequestType->setCustomer($customer);
-        $transactionRequestType->setBillTo($billTo);
-
-        // Configure hosted payment page settings.
-        $setting1 = new AnetAPI\SettingType();
-        $setting1->setSettingName("hostedPaymentButtonOptions");
-        $setting1->setSettingValue("{\"text\": \"Pay Now\"}");
-
-        // Set up the return URL to our custom verification page.
-        $cancelUrl = new moodle_url('/course/view.php', ['id' => $course->id]);
-        $returnUrl = new moodle_url('/enrol/authorizedotnet/return.php');
-
-        $setting2 = new AnetAPI\SettingType();
-        $setting2->setSettingName("hostedPaymentReturnOptions");
-        $setting2->setSettingValue(json_encode([
-            "showReceipt" => true,
-            "url" => $returnUrl->out(false),
-            "urlText" => "Continue to Course",
-            "cancelUrl" => $cancelUrl->out(false),
-            "cancelUrlText" => "Cancel and Return to Course"
-        ]));
-
-        // The third setting is now setting3.
-        $setting3 = new AnetAPI\SettingType();
-        $setting3->setSettingName("hostedPaymentPaymentOptions");
-        $setting3->setSettingValue("{\"cardCodeRequired\": false, \"showCreditCard\": true, \"showBankAccount\": false}");
-
-        // Build the final request.
-        $request = new AnetAPI\GetHostedPaymentPageRequest();
-        $request->setMerchantAuthentication($merchantAuthentication);
-        $request->setTransactionRequest($transactionRequestType);
-        $request->addToHostedPaymentSettings($setting1);
-        $request->addToHostedPaymentSettings($setting2);
-        $request->addToHostedPaymentSettings($setting3);
-
-        $controller = new AnetController\GetHostedPaymentPageController($request);
-        $useSandbox = !(bool)$plugin->get_config('checkproductionmode');
-        $endpoint = $useSandbox ? ANetConstants\ANetEnvironment::SANDBOX : ANetConstants\ANetEnvironment::PRODUCTION;
-
-        $response = $controller->executeWithApiResponse($endpoint);
-
-        if ($response != null && $response->getMessages()->getResultCode() == "Ok") {
-            $token = $response->getToken();
-            $formUrl = $useSandbox
-                ? 'https://test.authorize.net/payment/payment'
-                : 'https://accept.authorize.net/payment/payment';
-
-            return [
-                'status' => true,
-                'formurl' => $formUrl,
-                'token' => $token,
-            ];
+            try {
+                $data = new \stdClass();
+                $data->courseid = $course->id;
+                $data->userid = $user->id;
+                $data->instanceid = $instanceid;
+                $data->amount = $cost;
+                $data->trans_id = $response['transactionid'];
+                $data->timeupdated = time();
+                $plugininstance = $DB->get_record('enrol', ['id' => $instanceid, 'enrol' => 'authorizedotnet'], '*', MUST_EXIST);
+                $plugin->enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $data);
+            } catch (\Exception $e) {
+                debugging('Exception while trying to process payment: ' . $e->getMessage(), DEBUG_DEVELOPER);
+                $success = false;
+                $message = 'Internal error during enrollment.';
+            }
         } else {
-            $errorMessages = $response->getMessages()->getMessage();
-            $errorMessageText = 'Error: ' . $errorMessages[0]->getCode() . " " . $errorMessages[0]->getText();
-
-            return [
-                'status' => false,
-                'error' => get_string('errorheading', 'enrol_authorizedotnet') . ' ' . $errorMessageText,
-            ];
+            $success = false;
+            $message = $response['message'];
         }
+
+        return [
+            'success' => $success,
+            'message' => $message,
+        ];
     }
 
-    public static function get_hosted_payment_url_returns() {
-        return new external_single_structure([
-            'status' => new external_value(PARAM_BOOL, 'Status of the request'),
-            'formurl' => new external_value(PARAM_URL, 'The URL for the payment form submission', VALUE_OPTIONAL),
-            'token' => new external_value(PARAM_RAW, 'The payment token', VALUE_OPTIONAL),
-            'error' => new external_value(PARAM_TEXT, 'Error message', VALUE_OPTIONAL),
+    public static function process_payment_returns() {
+        return new external_function_parameters([
+            'success' => new external_value(PARAM_BOOL, 'Whether everything was successful or not.'),
+            'message' => new external_value(PARAM_RAW, 'Message (usually the error message).'),
         ]);
     }
 }

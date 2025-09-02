@@ -12,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
 
 /**
  * Authorize.Net enrolment plugin external functions.
@@ -26,11 +26,18 @@
 defined('MOODLE_INTERNAL') || die();
 
 $functions = [
-    'enrol_authorizedotnet_get_hosted_payment_url' => [
+    'enrol_authorizedotnet_get_config_for_js' => [
         'classname'   => 'enrol_authorizedotnet_externallib',
-        'methodname'  => 'get_hosted_payment_url',
-        'description' => 'Get the hosted payment page URL.',
+        'methodname'  => 'get_config_for_js',
+        'description' => 'Get the configuration necessary for the client-side JavaScript.',
         'type'        => 'read',
+        'ajax'        => true,
+    ],
+    'enrol_authorizedotnet_process_payment' => [
+        'classname'   => 'enrol_authorizedotnet_externallib',
+        'methodname'  => 'process_payment',
+        'description' => 'Process a payment with opaque data from Authorize.net.',
+        'type'        => 'write',
         'ajax'        => true,
     ],
 ];
