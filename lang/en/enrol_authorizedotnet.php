@@ -71,3 +71,4 @@ $string['paymentverification'] = 'Payment Verification';
 $string['paymentthanks'] = 'Thank you for your payment. You are now enrolled in the course.';
 $string['paymentprocessing'] = 'We are processing your payment. If you are not enrolled in a few moments, please contact the site administrator.';
 $string['welcometocoursetext'] = 'Welcome to our course {$a->course}! We hope you enjoy it.';
+$string['publicclientkey'] = 'Public client key';
