@@ -111,7 +111,6 @@ class authorizedotnet_helper {
      * Creates a transaction using the Authorize.Net REST API.
      *
      * @param float $amount Transaction amount.
-     * @param string $currency Currency code (e.g., USD).
      * @param object $opaquedata Opaque data object from Accept.js (descriptor + value).
      * @return array Transaction result.
      */
