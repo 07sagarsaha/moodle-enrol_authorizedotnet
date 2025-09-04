@@ -15,7 +15,7 @@
     along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 }}
 {{!
-    @template enrol_authorizedotnetpro/enrol_page
+    @template enrol_authorizedotnet/enrol_page
 
     Contents of the enrolment widget on the course enrolment page
 
@@ -43,20 +43,20 @@
     <div class="authorizedotnet-line"></div>
 
     <div class="authorizedotnet-subtotal">
-        <span>{{# str }} enrolnow, enrol_authorizedotnetpro {{/ str }}</span>
+        <span>{{# str }} enrolnowin, enrol_authorizedotnet {{/ str }} {{coursename}}</span>
         <span id="subtotalamount-{{instanceid}}">{{currency}} {{cost}}</span>
     </div>
 
     <div class="authorizedotnet-total" id="total-{{instanceid}}">
-        <strong>{{# str }} totaldue, enrol_authorizedotnetpro {{/ str }}</strong>
+        <strong>{{# str }} totaldue, enrol_authorizedotnet {{/ str }}</strong>
         <strong id="totalamount-{{instanceid}}">{{currency}} {{cost}}</strong>
     </div>
 
-    <div id="paymentresponse-{{instanceid}}" class="authorizedotnet-error-message authorizedotnet-hidden"></div>
+    <div id="paymentresponse-{{instanceid}}" class="authorizedotnet-error-message"></div>
 
     <div id="enrollmentbutton-{{instanceid}}">
         <button id="enrolbutton-{{instanceid}}" class="btn btn-primary">
-            {{# str }} enrolnow, enrol_authorizedotnetpro {{/ str }}
+            {{# str }} enrolnow, enrol_authorizedotnet {{/ str }}
         </button>
     </div>
 </div>

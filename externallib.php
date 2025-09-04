@@ -88,10 +88,10 @@ class enrol_authorizedotnet_externallib extends external_api {
         $courseid = $DB->get_field('enrol', 'courseid', ['id' => $instanceid]);
         $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
 
-        $helper = new \enrol_authorizedotnet\authorizedotnet_helper(
+        $helper = new enrol_authorizedotnet\authorizedotnet_helper(
             $plugin->get_config('loginid'),
             $plugin->get_config('transactionkey'),
-            $plugin->get_config('checkproductionmode')
+            (bool)$plugin->get_config('checkproductionmode')
         );
 
         $response = $helper->create_transaction($cost, 'USD', $opaquedataobject, $user, $course);
@@ -123,7 +123,8 @@ class enrol_authorizedotnet_externallib extends external_api {
                     $transactiondata->payment_status = 'unknown';
                 }
                 $transactiondata->response_code = isset($response['response_code']) ? (int) $response['response_code'] : 0;
-                $transactiondata->response_reason_code = isset($response['response_reason_code']) ? (int) $response['response_reason_code'] : 0;
+                $transactiondata->response_reason_code = isset($response['response_reason_code']) ?
+                 (int) $response['response_reason_code'] : 0;
                 $transactiondata->response_reason_text = $response['response_reason_text'] ?? '';
                 $transactiondata->auth_code = substr($response['auth_code'] ?? '', 0, 30);
                 $transactiondata->trans_id = $response['transactionid'];

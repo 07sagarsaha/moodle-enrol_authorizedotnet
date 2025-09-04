@@ -23,8 +23,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 function xmldb_enrol_authorizedotnet_upgrade($oldversion) {
     global $DB;
     $dbman = $DB->get_manager();
@@ -37,7 +35,7 @@ function xmldb_enrol_authorizedotnet_upgrade($oldversion) {
         $table = new xmldb_table('enrol_authorizedotnet');
 
         // Drop redundant fields that are not used with the new Accept.js API.
-        $fields_to_drop = [
+        $fieldstodrop = [
             'tax',
             'duty',
             'method',
@@ -47,7 +45,7 @@ function xmldb_enrol_authorizedotnet_upgrade($oldversion) {
             'state',
         ];
 
-        foreach ($fields_to_drop as $fieldname) {
+        foreach ($fieldstodrop as $fieldname) {
             if ($dbman->field_exists($table, $fieldname)) {
                 $dbman->drop_field($table, new xmldb_field($fieldname));
             }

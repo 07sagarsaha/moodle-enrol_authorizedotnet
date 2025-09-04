@@ -56,9 +56,6 @@ if ($ADMIN->fulltree) {
                    get_string('expiredaction', 'enrol_authorizedotnet'),
                    get_string('expiredaction_help', 'enrol_authorizedotnet'), ENROL_EXT_REMOVED_SUSPENDNOROLES, $options));
 
-    $settings->add(new admin_setting_description('enrol_authorizedotnet/currency',
-    get_string('currency', 'enrol_authorizedotnet'), get_string('currencynote', 'enrol_authorizedotnet')));
-
     // Enrol instance defaults.
     $settings->add(new admin_setting_heading('enrol_authorizedotnet_defaults',
         get_string('enrolinstancedefaults', 'admin'), get_string('enrolinstancedefaults_desc', 'admin')));

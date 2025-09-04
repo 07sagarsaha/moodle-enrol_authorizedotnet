@@ -1,113 +1,198 @@
 <?php
-namespace enrol_authorizedotnet;
-defined('MOODLE_INTERNAL') || die();
-require_once __DIR__ . '/vendor/authorizenet/authorizenet/autoload.php';
-use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\controller as AnetController;
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Helper class for interacting with the Authorize.net API.
+ * authorize.net payment gateway plugin.
+ *
+ * @package    enrol_authorizedotnet
+ * @author     DualCube <admin@dualcube.com>
+ * @copyright  2025 DualCube Team(https://dualcube.com)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+namespace enrol_authorizedotnet;
+
+defined('MOODLE_INTERNAL') || die();
+
+require_once($CFG->libdir . '/filelib.php');
+
+/**
+ * Helper class for interacting with the Authorize.Net API (REST).
  */
 class authorizedotnet_helper {
 
+    /**
+     * API login ID for Authorize.Net.
+     *
+     * @var string
+     */
     private string $apiloginid;
+
+    /**
+     * Transaction key for Authorize.Net.
+     *
+     * @var string
+     */
     private string $transactionkey;
+
+    /**
+     * Whether to use sandbox mode.
+     *
+     * @var bool
+     */
     private bool $sandbox;
 
+    /**
+     * Constructor for Authorize.Net helper.
+     *
+     * @param string $apiloginid API login ID.
+     * @param string $transactionkey Transaction key.
+     * @param bool $sandbox Use sandbox environment if true.
+     */
     public function __construct(string $apiloginid, string $transactionkey, bool $sandbox) {
         $this->apiloginid = $apiloginid;
         $this->transactionkey = $transactionkey;
         $this->sandbox = $sandbox;
     }
 
-    public function create_transaction(float $amount, string $currency, object $opaquedata, \stdClass $user, \stdClass $course): array {
-        // Authentication.
-        $merchantauthentication = new AnetAPI\MerchantAuthenticationType();
-        $merchantauthentication->setName($this->apiloginid);
-        $merchantauthentication->setTransactionKey($this->transactionkey);
+    /**
+     * Get merchant details (including currency) from Authorize.Net.
+     *
+     * @return string
+     */
+    public function get_merchant_currency(): string {
+        $url = $this->sandbox
+            ? 'https://apitest.authorize.net/xml/v1/request.api'
+            : 'https://api.authorize.net/xml/v1/request.api';
 
-        // Payment details.
-        $opaquedatatype = new AnetAPI\OpaqueDataType();
-        $opaquedatatype->setDataDescriptor($opaquedata->dataDescriptor);
-        $opaquedatatype->setDataValue($opaquedata->dataValue);
+        $payload = [
+            'getMerchantDetailsRequest' => [
+                'merchantAuthentication' => [
+                    'name'           => $this->apiloginid,
+                    'transactionKey' => $this->transactionkey,
+                ],
+            ],
+        ];
 
-        $payment = new AnetAPI\PaymentType();
-        $payment->setOpaqueData($opaquedatatype);
+        $curl = new \curl();
+        $options = [
+            'CURLOPT_RETURNTRANSFER' => true,
+            'CURLOPT_HTTPHEADER'     => ['Content-Type: application/json'],
+            'CURLOPT_TIMEOUT'        => 30,
+            'CURLOPT_SSL_VERIFYPEER' => true,
+            'CURLOPT_SSL_VERIFYHOST' => 2,
+        ];
 
-        // Transaction request.
-        $transactionrequest = new AnetAPI\TransactionRequestType();
-        $transactionrequest->setTransactionType("authCaptureTransaction");
-        $transactionrequest->setAmount($amount);
-        $transactionrequest->setPayment($payment);
+        $response = $curl->post($url, json_encode($payload), $options);
 
-        // Add order information.
-        $order = new AnetAPI\OrderType();
-        $invoiceNumber = $user->id . '-' . $course->id . '-' . time();
-        $order->setInvoiceNumber($invoiceNumber);
-        $order->setDescription($course->fullname);
-        $transactionrequest->setOrder($order);
-
-        // Add customer data.
-        $customer = new AnetAPI\CustomerDataType();
-        $customer->setId($user->id);
-        $customer->setEmail($user->email);
-        $transactionrequest->setCustomer($customer);
-
-        // Add billing information.
-        $billTo = new AnetAPI\CustomerAddressType();
-        $billTo->setFirstName($user->firstname);
-        $billTo->setLastName($user->lastname);
-        $billTo->setCompany(!empty($user->institution) ? $user->institution : '');
-        $billTo->setAddress(!empty($user->address) ? $user->address : 'N/A');
-        $billTo->setCity(!empty($user->city) ? $user->city : 'N/A');
-        $billTo->setZip(!empty($user->zip) ? $user->zip : '00000');
-        $billTo->setCountry(!empty($user->country) ? $user->country : 'US');
-        $billTo->setPhoneNumber(!empty($user->phone1) ? $user->phone1 : '');
-        $billTo->setEmail($user->email);
-        $transactionrequest->setBillTo($billTo);
-
-        $request = new AnetAPI\CreateTransactionRequest();
-        $request->setMerchantAuthentication($merchantauthentication);
-        $request->setRefId('ref' . time());
-        $request->setTransactionRequest($transactionrequest);
-
-        // Execute.
-        $controller = new AnetController\CreateTransactionController($request);
-        $environment = $this->sandbox
-            ? \net\authorize\api\constants\ANetEnvironment::SANDBOX
-            : \net\authorize\api\constants\ANetEnvironment::PRODUCTION;
-
-        $response = $controller->executeWithApiResponse($environment);
-
-        if ($response === null) {
-            return ['success' => false, 'message' => 'No response from Authorize.net'];
+        if ($response === false) {
+            return ['success' => false, 'currency' => '', 'message' => 'No response from Authorize.Net'];
         }
 
-        if ($response->getMessages()->getResultCode() !== "Ok") {
-            $tresponse = $response->getTransactionResponse();
-            $message = $tresponse && $tresponse->getErrors()
-                ? $tresponse->getErrors()[0]->getErrorText()
-                : $response->getMessages()->getMessage()[0]->getText();
+        $response = preg_replace('/^\xEF\xBB\xBF/', '', $response);
+        $result = json_decode(trim($response), true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return ['success' => false, 'currency' => '', 'message' => 'Invalid JSON response from Authorize.Net'];
+        }
+
+        $messages = $result['messages'] ?? null;
+        if (!$messages || $messages['resultCode'] !== 'Ok') {
+            $message = $messages['message'][0]['text'] ?? 'Unknown error';
+            return ['success' => false, 'currency' => '', 'message' => $message];
+        }
+
+        $currencies = $result['currencies'] ?? [];
+        $currency = is_array($currencies) && !empty($currencies) ? $currencies[0] : '';
+
+        return $currency;
+    }
+
+    /**
+     * Creates a transaction using the Authorize.Net REST API.
+     *
+     * @param float $amount Transaction amount.
+     * @param string $currency Currency code (e.g., USD).
+     * @param object $opaquedata Opaque data object from Accept.js (descriptor + value).
+     * @return array Transaction result.
+     */
+    public function create_transaction(float $amount, string $currency, object $opaquedata): array {
+        $url = $this->sandbox
+            ? 'https://apitest.authorize.net/xml/v1/request.api'
+            : 'https://api.authorize.net/xml/v1/request.api';
+
+        // Build request payload.
+        $payload = [
+            'createTransactionRequest' => [
+                'merchantAuthentication' => [
+                    'name'           => $this->apiloginid,
+                    'transactionKey' => $this->transactionkey,
+                ],
+                'refId' => 'ref' . time(),
+                'transactionRequest' => [
+                    'transactionType' => 'authCaptureTransaction',
+                    'amount' => $amount,
+                    'payment' => [
+                        'opaqueData' => [
+                            'dataDescriptor' => $opaquedata->dataDescriptor,
+                            'dataValue'      => $opaquedata->dataValue,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        // Moodle curl wrapper.
+        $curl = new \curl();
+        $options = [
+            'CURLOPT_RETURNTRANSFER' => true,
+            'CURLOPT_HTTPHEADER'     => ['Content-Type: application/json'],
+            'CURLOPT_TIMEOUT'        => 30,
+            'CURLOPT_SSL_VERIFYPEER' => true,
+            'CURLOPT_SSL_VERIFYHOST' => 2,
+        ];
+
+        $response = $curl->post($url, json_encode($payload), $options);
+
+        if ($response === false) {
+            return ['success' => false, 'message' => 'No response from Authorize.Net'];
+        }
+
+        $response = preg_replace('/^\xEF\xBB\xBF/', '', $response);
+
+        $result = json_decode(trim($response), true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return ['success' => false, 'message' => 'Invalid JSON response from Authorize.Net'];
+        }
+
+        $messages = $result['messages'] ?? null;
+        if (!$messages || $messages['resultCode'] !== 'Ok') {
+            $message = $messages['message'][0]['text'] ?? 'Unknown error';
             return ['success' => false, 'message' => $message];
         }
 
-        $tresponse = $response->getTransactionResponse();
-        if ($tresponse && $tresponse->getResponseCode() === "1") {            
-            $message = $tresponse->getMessages()[0]; // First message object
+        $tresponse = $result['transactionResponse'] ?? null;
+        if ($tresponse && $tresponse['responseCode'] === "1") {
             return [
-                'success'              => true,
-                'transactionid'        => $tresponse->getTransId(),
-                'status'               => $message->getDescription(),
-                'response_code'        => $tresponse->getResponseCode(),
-                'response_reason_code' => $message->getCode(),
-                'auth_code'            => $tresponse->getAuthCode(),
+                'success'        => true,
+                'transactionid' => $tresponse['transId'] ?? '',
+                'status'         => $tresponse['messages'][0]['description'] ?? 'Approved',
             ];
         }
 
-        $message = $tresponse && $tresponse->getErrors()
-            ? $tresponse->getErrors()[0]->getErrorText()
-            : 'Transaction Failed';
-
+        $message = $tresponse['errors'][0]['errorText'] ?? 'Transaction Failed';
         return ['success' => false, 'message' => $message];
     }
 }

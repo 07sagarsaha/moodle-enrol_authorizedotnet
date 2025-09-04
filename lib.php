@@ -23,15 +23,18 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once('vendor/authorizenet/authorizenet/autoload.php');
-
-use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\controller as AnetController;
-use core_enrol\output\enrol_page;
-
+require_once(__DIR__ . '/authorizedotnet_helper.php');
+ use core_enrol\output\enrol_page;
 class enrol_authorizedotnet_plugin extends enrol_plugin {
+
+    public function get_merchant_currency() {
+        $helper = new enrol_authorizedotnet\authorizedotnet_helper(
+            $this->get_config('loginid'),
+            $this->get_config('transactionkey'),
+            (bool)$this->get_config('checkproductionmode')
+        );
+        return $helper->get_merchant_currency();
+    }
 
     public function get_currencies() {
         $currencies = [
@@ -144,7 +147,9 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         }
 
         if (abs($cost) < 0.01) {
-            $enrolpage = new enrol_page($instance, $this->get_instance_name($instance), $OUTPUT->notification(get_string('nocost', 'enrol_authorizedotnet')));
+            $enrolpage = new enrol_page($instance,
+            $this->get_instance_name($instance),
+            $OUTPUT->notification(get_string('nocost', 'enrol_authorizedotnet')));
             return $OUTPUT->render($enrolpage);
         }
 
@@ -152,14 +157,14 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $localisedcost = format_float($cost, 2, true);
 
         $templatedata = [
-            'currency' => $instance->currency,
+            'currency' => $this->get_merchant_currency(),
             'cost' => $localisedcost,
             'coursename' => format_string($course->fullname, true, ['context' => $context]),
             'instanceid' => $instance->id,
         ];
 
         $body = $OUTPUT->render_from_template('enrol_authorizedotnet/enrol_page', $templatedata);
-        
+
         $PAGE->requires->js_call_amd('enrol_authorizedotnet/payment', 'authorizeNetPayment', [$instance->id, $USER->id]);
 
         $enrolpage = new enrol_page($instance, $name, $body);
@@ -183,10 +188,11 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $mform->setType('cost', PARAM_RAW); // Use unformat_float to get real value.
         $mform->setDefault('cost', format_float($this->get_config('cost'), 2, true));
 
-        $currencies = $this->get_currencies();
-        $mform->addElement('select', 'currency', get_string('currency', 'enrol_authorizedotnet'), $currencies);
-        $mform->setDefault('currency', $this->get_config('currency'));
+        $merchantcurrency = $this->get_merchant_currency();
+        $mform->addElement('static', 'currency_display', get_string('currency', 'enrol_authorizedotnet'), $merchantcurrency);
 
+        $mform->addElement('static', 'currencywarning', '',
+        get_string('currencycannotchange', 'enrol_authorizedotnet', $merchantcurrency));
         if ($instance->id) {
             $roles = get_default_enrol_roles($context, $instance->roleid);
         } else {
@@ -233,7 +239,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
     public function restore_instance(restore_enrolments_structure_step $step, stdClass $data, $course, $oldid) {
         global $DB;
         if (!$step->get_task()->get_target() == backup::TARGET_NEW_COURSE) {
-            if($instances=$DB->get_records(
+            if ($instances = $DB->get_records(
                     'enrol',
                     [
                         'courseid'   => $data->courseid,
@@ -244,7 +250,7 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                     ],
                     'id'
                 )
-            ){
+            ) {
                 $instance = reset($instances);
                 $instanceid = $instance->id;
             }
@@ -301,7 +307,9 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return true;
     }
 
-    public function send_message_custom($course, $userfrom, $userto, $subject, $orderdetails, $shortname, $fullmessage, $fullmessagehtml) {
+    public function send_message_custom(
+        $course, $userfrom, $userto, $subject,
+        $orderdetails, $shortname, $fullmessage, $fullmessagehtml) {
         $recipients = is_array($userto) ? $userto : [$userto];
         foreach ($recipients as $recipient) {
             $message = new \core\message\message();
@@ -348,7 +356,8 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'sitename' => $sitename,
             ]);
             $subject = get_string('enrolmentuser', 'enrol_authorizedotnet', $shortname);
-            self::send_message_custom($course, $userfrom, $user, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom($course, $userfrom, $user, $subject,
+            $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
         }
 
         if (!empty($mailteachers) && !empty($teacher)) {
@@ -361,7 +370,8 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'username' => fullname($user),
                 'course' => $course->fullname,
             ]);
-            self::send_message_custom($course, $user, $teacher, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom($course, $user, $teacher, $subject,
+             $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
         }
 
         if (!empty($mailadmins)) {
@@ -375,7 +385,8 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'username' => fullname($user),
                 'course' => $course->fullname,
             ]);
-            self::send_message_custom($course, $user, $admins, $subject, $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom($course, $user, $admins, $subject,
+             $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
         }
     }
 }
