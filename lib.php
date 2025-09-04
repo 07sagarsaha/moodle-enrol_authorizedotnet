@@ -12,10 +12,10 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * authorize.net enrolment plugin.
+ * Authorize.net enrolment plugin.
  *
  * @package    enrol_authorizedotnet
  * @author     DualCube <admin@dualcube.com>
@@ -23,19 +23,41 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 require_once(__DIR__ . '/authorizedotnet_helper.php');
- use core_enrol\output\enrol_page;
+
+use core_enrol\output\enrol_page;
+
+/**
+ * Enrolment plugin class for Authorize.net.
+ *
+ * Provides UI hooks, capabilities checks, and helper utilities
+ * for handling enrolment via Authorize.net.
+ *
+ * @package   enrol_authorizedotnet
+ */
 class enrol_authorizedotnet_plugin extends enrol_plugin {
 
+    /**
+     * Get the merchant currency from the Authorize.net API via helper.
+     *
+     * @return string ISO-4217 currency code (e.g., "USD")
+     */
     public function get_merchant_currency() {
         $helper = new enrol_authorizedotnet\authorizedotnet_helper(
             $this->get_config('loginid'),
             $this->get_config('transactionkey'),
-            (bool)$this->get_config('checkproductionmode')
+            (bool) $this->get_config('checkproductionmode')
         );
         return $helper->get_merchant_currency();
     }
 
+    /**
+     * Return the currencies supported by this plugin for display/localisation.
+     *
+     * @return array map of currency code => lang_string
+     */
     public function get_currencies() {
         $currencies = [
             'AUD' => new lang_string('AUD', 'core_currencies'),
@@ -48,29 +70,65 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return $currencies;
     }
 
+    /**
+     * Return info icons for course page listing.
+     *
+     * @param array $instances enrol instances in a course
+     * @return pix_icon[] list of icons
+     */
     public function get_info_icons(array $instances) {
         return [new pix_icon('icon', get_string('pluginname', 'enrol_authorizedotnet'), 'enrol_authorizedotnet')];
     }
 
+    /**
+     * Whether roles are protected (not editable) for this enrolment method.
+     *
+     * @return bool
+     */
     public function roles_protected() {
         return false;
     }
 
+    /**
+     * Whether users can be unenrolled by this plugin.
+     *
+     * @param stdClass $instance enrol instance
+     * @return bool
+     */
     public function allow_unenrol(stdClass $instance) {
         return true;
     }
 
+    /**
+     * Whether this enrolment instance is manageable.
+     *
+     * @param stdClass $instance enrol instance
+     * @return bool
+     */
     public function allow_manage(stdClass $instance) {
         return true;
     }
 
+    /**
+     * Show "Enrol me" link on the course enrolment page.
+     *
+     * @param stdClass $instance enrol instance
+     * @return bool
+     */
     public function show_enrolme_link(stdClass $instance) {
         return ($instance->status == ENROL_INSTANCE_ENABLED);
     }
 
+    /**
+     * Add navigation to course settings for this enrolment instance.
+     *
+     * @param navigation_node $instancesnode
+     * @param stdClass $instance enrol instance
+     * @return void
+     */
     public function add_course_navigation($instancesnode, stdClass $instance) {
         if ($instance->enrol !== 'authorizedotnet') {
-             throw new coding_exception('Invalid enrol instance type!');
+            throw new coding_exception('Invalid enrol instance type!');
         }
         $context = context_course::instance($instance->courseid);
         if (has_capability('enrol/authorizedotnet:config', $context)) {
@@ -79,13 +137,19 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 [
                     'courseid' => $instance->courseid,
                     'id' => $instance->id,
-                    'type' => 'authorizedotnet'
+                    'type' => 'authorizedotnet',
                 ]
             );
             $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
         }
     }
 
+    /**
+     * Action icons for the manage enrolments table.
+     *
+     * @param stdClass $instance enrol instance
+     * @return array
+     */
     public function get_action_icons(stdClass $instance) {
         global $OUTPUT;
         if ($instance->enrol !== 'authorizedotnet') {
@@ -95,14 +159,21 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $icons = [];
         if (has_capability('enrol/authorizedotnet:config', $context)) {
             $editlink = new moodle_url(
-                "/enrol/editinstance.php",
+                '/enrol/editinstance.php',
                 [
-                    'courseid' => $instance->courseid, 'id' => $instance->id, 'type' => 'authorizedotnet'
+                    'courseid' => $instance->courseid,
+                    'id' => $instance->id,
+                    'type' => 'authorizedotnet',
                 ]
             );
-            $icons[] = $OUTPUT->action_icon($editlink, new pix_icon('t/edit', get_string('edit'), 'core',
+            $icons[] = $OUTPUT->action_icon(
+                $editlink,
+                new pix_icon(
+                    't/edit',
+                    get_string('edit'),
+                    'core',
                     [
-                        'class' => 'iconsmall'
+                        'class' => 'iconsmall',
                     ]
                 )
             );
@@ -110,6 +181,12 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return $icons;
     }
 
+    /**
+     * Link to create a new instance on the course enrolment methods page.
+     *
+     * @param int $courseid course id
+     * @return moodle_url|null
+     */
     public function get_newinstance_link($courseid) {
         $context = context_course::instance($courseid, MUST_EXIST);
         if (!has_capability('moodle/course:enrolconfig', $context) || !has_capability('enrol/authorizedotnet:config', $context)) {
@@ -118,6 +195,12 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return new moodle_url('/enrol/editinstance.php', ['courseid' => $courseid, 'type' => 'authorizedotnet']);
     }
 
+    /**
+     * Render the enrolment page for this instance.
+     *
+     * @param stdClass $instance enrol instance
+     * @return string HTML
+     */
     public function enrol_page_hook(stdClass $instance) {
         global $CFG, $USER, $OUTPUT, $DB, $PAGE;
 
@@ -147,9 +230,11 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         }
 
         if (abs($cost) < 0.01) {
-            $enrolpage = new enrol_page($instance,
-            $this->get_instance_name($instance),
-            $OUTPUT->notification(get_string('nocost', 'enrol_authorizedotnet')));
+            $enrolpage = new enrol_page(
+                $instance,
+                $this->get_instance_name($instance),
+                $OUTPUT->notification(get_string('nocost', 'enrol_authorizedotnet'))
+            );
             return $OUTPUT->render($enrolpage);
         }
 
@@ -171,16 +256,31 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return $OUTPUT->render($enrolpage);
     }
 
+    /**
+     * Whether to use standard editing UI on instance edit form.
+     *
+     * @return bool
+     */
     public function use_standard_editing_ui() {
         return true;
     }
 
+    /**
+     * Add elements to the instance edit form.
+     *
+     * @param stdClass $instance enrol instance (or defaults when creating)
+     * @param MoodleQuickForm $mform form
+     * @param context $context course context
+     * @return void
+     */
     public function edit_instance_form($instance, MoodleQuickForm $mform, $context) {
         $mform->addElement('text', 'name', get_string('custominstancename', 'enrol'));
         $mform->setType('name', PARAM_TEXT);
 
-        $options = [ENROL_INSTANCE_ENABLED  => get_string('yes'),
-                         ENROL_INSTANCE_DISABLED => get_string('no')];
+        $options = [
+            ENROL_INSTANCE_ENABLED  => get_string('yes'),
+            ENROL_INSTANCE_DISABLED => get_string('no'),
+        ];
         $mform->addElement('select', 'status', get_string('status', 'enrol_authorizedotnet'), $options);
         $mform->setDefault('status', $this->get_config('status'));
 
@@ -191,8 +291,13 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $merchantcurrency = $this->get_merchant_currency();
         $mform->addElement('static', 'currency_display', get_string('currency', 'enrol_authorizedotnet'), $merchantcurrency);
 
-        $mform->addElement('static', 'currencywarning', '',
-        get_string('currencycannotchange', 'enrol_authorizedotnet', $merchantcurrency));
+        $mform->addElement(
+            'static',
+            'currencywarning',
+            '',
+            get_string('currencycannotchange', 'enrol_authorizedotnet', $merchantcurrency)
+        );
+
         if ($instance->id) {
             $roles = get_default_enrol_roles($context, $instance->roleid);
         } else {
@@ -201,27 +306,52 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         $mform->addElement('select', 'roleid', get_string('assignrole', 'enrol_authorizedotnet'), $roles);
         $mform->setDefault('roleid', $this->get_config('roleid'));
 
-        $mform->addElement('duration', 'enrolperiod', get_string('enrolperiod', 'enrol_authorizedotnet'),
-                           ['optional' => true, 'defaultunit' => 86400]);
+        $mform->addElement(
+            'duration',
+            'enrolperiod',
+            get_string('enrolperiod', 'enrol_authorizedotnet'),
+            ['optional' => true, 'defaultunit' => 86400]
+        );
         $mform->setDefault('enrolperiod', $this->get_config('enrolperiod'));
         $mform->addHelpButton('enrolperiod', 'enrolperiod', 'enrol_authorizedotnet');
 
-        $mform->addElement('date_time_selector', 'enrolstartdate', get_string('enrolstartdate', 'enrol_authorizedotnet'),
-                           ['optional' => true]);
+        $mform->addElement(
+            'date_time_selector',
+            'enrolstartdate',
+            get_string('enrolstartdate', 'enrol_authorizedotnet'),
+            ['optional' => true]
+        );
         $mform->setDefault('enrolstartdate', 0);
         $mform->addHelpButton('enrolstartdate', 'enrolstartdate', 'enrol_authorizedotnet');
 
-        $mform->addElement('date_time_selector', 'enrolenddate', get_string('enrolenddate', 'enrol_authorizedotnet'),
-                           ['optional' => true]);
+        $mform->addElement(
+            'date_time_selector',
+            'enrolenddate',
+            get_string('enrolenddate', 'enrol_authorizedotnet'),
+            ['optional' => true]
+        );
         $mform->setDefault('enrolenddate', 0);
         $mform->addHelpButton('enrolenddate', 'enrolenddate', 'enrol_authorizedotnet');
 
         if (enrol_accessing_via_instance($instance)) {
-            $mform->addElement('static', 'selfwarn', get_string('instanceeditselfwarning', 'core_enrol'),
-                                get_string('instanceeditselfwarningtext', 'core_enrol'));
+            $mform->addElement(
+                'static',
+                'selfwarn',
+                get_string('instanceeditselfwarning', 'core_enrol'),
+                get_string('instanceeditselfwarningtext', 'core_enrol')
+            );
         }
     }
 
+    /**
+     * Validate the instance edit form.
+     *
+     * @param array $data form data
+     * @param array $files files
+     * @param stdClass $instance enrol instance
+     * @param context $context course context
+     * @return array errors
+     */
     public function edit_instance_validation($data, $files, $instance, $context) {
         $errors = [];
 
@@ -236,67 +366,127 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return $errors;
     }
 
+    /**
+     * Restore an enrolment instance during course restore.
+     *
+     * @param restore_enrolments_structure_step $step
+     * @param stdClass $data instance data
+     * @param stdClass $course course record
+     * @param int $oldid old instance id
+     * @return void
+     */
     public function restore_instance(restore_enrolments_structure_step $step, stdClass $data, $course, $oldid) {
         global $DB;
         if (!$step->get_task()->get_target() == backup::TARGET_NEW_COURSE) {
             if ($instances = $DB->get_records(
-                    'enrol',
-                    [
-                        'courseid'   => $data->courseid,
-                        'enrol'      => $this->get_name(),
-                        'roleid'     => $data->roleid,
-                        'cost'       => $data->cost,
-                        'currency'   => $data->currency,
-                    ],
-                    'id'
-                )
-            ) {
+                'enrol',
+                [
+                    'courseid'   => $data->courseid,
+                    'enrol'      => $this->get_name(),
+                    'roleid'     => $data->roleid,
+                    'cost'       => $data->cost,
+                    'currency'   => $data->currency,
+                ],
+                'id'
+            )) {
                 $instance = reset($instances);
                 $instanceid = $instance->id;
             }
         }
-        $instanceid = $this->add_instance($course, (array)$data);
+        $instanceid = $this->add_instance($course, (array) $data);
         $step->set_mapping('enrol', $oldid, $instanceid);
     }
 
+    /**
+     * Restore a user enrolment record.
+     *
+     * @param restore_enrolments_structure_step $step
+     * @param stdClass $data user enrolment data
+     * @param stdClass $instance enrol instance
+     * @param int $userid user id
+     * @param int $oldinstancestatus previous instance status
+     * @return void
+     */
     public function restore_user_enrolment(restore_enrolments_structure_step $step, $data, $instance, $userid, $oldinstancestatus) {
         $this->enrol_user($instance, $userid, null, $data->timestart, $data->timeend, $data->status);
     }
 
+    /**
+     * Actions available for a user enrolment row.
+     *
+     * @param course_enrolment_manager $manager
+     * @param stdClass $ue user enrolment
+     * @return array of user_enrolment_action
+     */
     public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
         $actions = [];
         $context = $manager->get_context();
         $instance = $ue->enrolmentinstance;
         $params = $manager->get_moodlepage()->url->params();
         $params['ue'] = $ue->id;
-        if ($this->allow_unenrol($instance) && has_capability("enrol/authorizedotnet:unenrol", $context)) {
+        if ($this->allow_unenrol($instance) && has_capability('enrol/authorizedotnet:unenrol', $context)) {
             $url = new moodle_url('/enrol/unenroluser.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/delete', ''), get_string('unenrol', 'enrol'), $url,
-                                                   ['class' => 'unenrollink', 'rel' => $ue->id]);
+            $actions[] = new user_enrolment_action(
+                new pix_icon('t/delete', ''),
+                get_string('unenrol', 'enrol'),
+                $url,
+                ['class' => 'unenrollink', 'rel' => $ue->id]
+            );
         }
-        if ($this->allow_manage($instance) && has_capability("enrol/authorizedotnet:manage", $context)) {
+        if ($this->allow_manage($instance) && has_capability('enrol/authorizedotnet:manage', $context)) {
             $url = new moodle_url('/enrol/editenrolment.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/edit', ''), get_string('edit'), $url,
-                                                   ['class' => 'editenrollink', 'rel' => $ue->id]);
+            $actions[] = new user_enrolment_action(
+                new pix_icon('t/edit', ''),
+                get_string('edit'),
+                $url,
+                ['class' => 'editenrollink', 'rel' => $ue->id]
+            );
         }
         return $actions;
     }
 
+    /**
+     * Cron task to process enrolment expirations.
+     *
+     * @return void
+     */
     public function cron() {
         $trace = new text_progress_trace();
         $this->process_expirations($trace);
     }
 
+    /**
+     * Whether the current user can delete this instance.
+     *
+     * @param stdClass $instance enrol instance
+     * @return bool
+     */
     public function can_delete_instance($instance) {
         $context = context_course::instance($instance->courseid);
         return has_capability('enrol/authorizedotnet:config', $context);
     }
 
+    /**
+     * Whether the current user can hide/show this instance.
+     *
+     * @param stdClass $instance enrol instance
+     * @return bool
+     */
     public function can_hide_show_instance($instance) {
         $context = context_course::instance($instance->courseid);
         return has_capability('enrol/authorizedotnet:config', $context);
     }
 
+    /**
+     * Enrol the user and send notifications.
+     *
+     * @param stdClass $plugininstance enrol instance
+     * @param stdClass $course course record
+     * @param context $context course context
+     * @param stdClass $user user record
+     * @param stdClass $enrollmentdata extra data (transaction etc.)
+     * @return bool
+     */
     public function enroll_user_and_send_notifications($plugininstance, $course, $context, $user, $enrollmentdata) {
         global $DB;
         $plugin = enrol_get_plugin('authorizedotnet');
@@ -307,9 +497,29 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         return true;
     }
 
+    /**
+     * Send a message to one or more recipients.
+     *
+     * @param stdClass $course course
+     * @param stdClass $userfrom sender
+     * @param stdClass|array $userto recipient or list of recipients
+     * @param string $subject subject
+     * @param stdClass $orderdetails order details object
+     * @param string $shortname course shortname
+     * @param string $fullmessage plain message
+     * @param string $fullmessagehtml html message
+     * @return void
+     */
     public function send_message_custom(
-        $course, $userfrom, $userto, $subject,
-        $orderdetails, $shortname, $fullmessage, $fullmessagehtml) {
+        $course,
+        $userfrom,
+        $userto,
+        $subject,
+        $orderdetails,
+        $shortname,
+        $fullmessage,
+        $fullmessagehtml
+    ) {
         $recipients = is_array($userto) ? $userto : [$userto];
         foreach ($recipients as $recipient) {
             $message = new \core\message\message();
@@ -330,6 +540,15 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
         }
     }
 
+    /**
+     * Send enrolment notifications to student, teacher, and admins (based on config).
+     *
+     * @param stdClass $course
+     * @param context $context
+     * @param stdClass $user
+     * @param enrol_plugin $plugin
+     * @return void
+     */
     public function send_enrollment_notifications($course, $context, $user, $plugin) {
         global $CFG;
         $teacher = false;
@@ -356,22 +575,38 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
                 'sitename' => $sitename,
             ]);
             $subject = get_string('enrolmentuser', 'enrol_authorizedotnet', $shortname);
-            self::send_message_custom($course, $userfrom, $user, $subject,
-            $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom(
+                $course,
+                $userfrom,
+                $user,
+                $subject,
+                $orderdetails,
+                $shortname,
+                $fullmessage,
+                '<p>' . $fullmessage . '</p>'
+            );
         }
 
         if (!empty($mailteachers) && !empty($teacher)) {
             $fullmessage = get_string('adminmessage', 'enrol_authorizedotnet', [
                 'username' => fullname($user),
                 'course' => $course->fullname,
-                'sitename' => $sitename
+                'sitename' => $sitename,
             ]);
             $subject = get_string('enrolmentnew', 'enrol_authorizedotnet', [
                 'username' => fullname($user),
                 'course' => $course->fullname,
             ]);
-            self::send_message_custom($course, $user, $teacher, $subject,
-             $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom(
+                $course,
+                $user,
+                $teacher,
+                $subject,
+                $orderdetails,
+                $shortname,
+                $fullmessage,
+                '<p>' . $fullmessage . '</p>'
+            );
         }
 
         if (!empty($mailadmins)) {
@@ -379,14 +614,22 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
             $fullmessage = get_string('adminmessage', 'enrol_authorizedotnet', [
                 'username' => fullname($user),
                 'course' => $course->fullname,
-                'sitename' => $sitename
+                'sitename' => $sitename,
             ]);
             $subject = get_string('enrolmentnew', 'enrol_authorizedotnet', [
                 'username' => fullname($user),
                 'course' => $course->fullname,
             ]);
-            self::send_message_custom($course, $user, $admins, $subject,
-             $orderdetails, $shortname, $fullmessage, '<p>' . $fullmessage . '</p>');
+            self::send_message_custom(
+                $course,
+                $user,
+                $admins,
+                $subject,
+                $orderdetails,
+                $shortname,
+                $fullmessage,
+                '<p>' . $fullmessage . '</p>'
+            );
         }
     }
 }

@@ -98,21 +98,8 @@ class authorizedotnet_helper {
 
         $response = $curl->post($url, json_encode($payload), $options);
 
-        if ($response === false) {
-            return ['success' => false, 'currency' => '', 'message' => 'No response from Authorize.Net'];
-        }
-
         $response = preg_replace('/^\xEF\xBB\xBF/', '', $response);
         $result = json_decode(trim($response), true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return ['success' => false, 'currency' => '', 'message' => 'Invalid JSON response from Authorize.Net'];
-        }
-
-        $messages = $result['messages'] ?? null;
-        if (!$messages || $messages['resultCode'] !== 'Ok') {
-            $message = $messages['message'][0]['text'] ?? 'Unknown error';
-            return ['success' => false, 'currency' => '', 'message' => $message];
-        }
 
         $currencies = $result['currencies'] ?? [];
         $currency = is_array($currencies) && !empty($currencies) ? $currencies[0] : '';
@@ -128,7 +115,7 @@ class authorizedotnet_helper {
      * @param object $opaquedata Opaque data object from Accept.js (descriptor + value).
      * @return array Transaction result.
      */
-    public function create_transaction(float $amount, string $currency, object $opaquedata): array {
+    public function create_transaction(float $amount, object $opaquedata): array {
         $url = $this->sandbox
             ? 'https://apitest.authorize.net/xml/v1/request.api'
             : 'https://api.authorize.net/xml/v1/request.api';

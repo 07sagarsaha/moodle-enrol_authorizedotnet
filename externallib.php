@@ -12,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * External library for authorizedotnet.
@@ -33,14 +33,33 @@ use core_payment\helper as payment_helper;
 require_once(__DIR__ . '/authorizedotnet_helper.php');
 require_once("$CFG->libdir/externallib.php");
 
+/**
+ * External functions for the Authorize.net enrolment plugin.
+ *
+ * Defines the external functions exposed via web services.
+ *
+ * @package    enrol_authorizedotnet
+ * @category   external
+ */
 class enrol_authorizedotnet_externallib extends external_api {
 
+    /**
+     * Returns parameters for get_config_for_js.
+     *
+     * @return external_function_parameters
+     */
     public static function get_config_for_js_parameters() {
         return new external_function_parameters([
             'instanceid' => new external_value(PARAM_INT, 'Enrolment instance ID'),
         ]);
     }
 
+    /**
+     * Returns configuration data needed for client-side JS.
+     *
+     * @param int $instanceid Enrolment instance ID
+     * @return array
+     */
     public static function get_config_for_js($instanceid) {
         global $DB;
         self::validate_parameters(self::get_config_for_js_parameters(), ['instanceid' => $instanceid]);
@@ -52,6 +71,11 @@ class enrol_authorizedotnet_externallib extends external_api {
         ];
     }
 
+    /**
+     * Returns description of get_config_for_js return values.
+     *
+     * @return external_function_parameters
+     */
     public static function get_config_for_js_returns() {
         return new external_function_parameters([
             'apiloginid' => new external_value(PARAM_RAW, 'The API login ID for the gateway.'),
@@ -60,6 +84,11 @@ class enrol_authorizedotnet_externallib extends external_api {
         ]);
     }
 
+    /**
+     * Returns parameters for process_payment.
+     *
+     * @return external_function_parameters
+     */
     public static function process_payment_parameters() {
         return new external_function_parameters([
             'instanceid' => new external_value(PARAM_INT, 'The enrolment instance ID'),
@@ -68,8 +97,19 @@ class enrol_authorizedotnet_externallib extends external_api {
         ]);
     }
 
+    /**
+     * Processes a payment and enrols the user if successful.
+     *
+     * @param int $instanceid Enrolment instance ID
+     * @param int $userid User ID
+     * @param string $opaquedata Opaque data from Authorize.net
+     * @return array {
+     *     success => bool Whether the payment succeeded,
+     *     message => string Message or error description
+     * }
+     */
     public static function process_payment(int $instanceid, int $userid, string $opaquedata): array {
-        global $USER, $DB;
+        global $DB;
 
         self::validate_parameters(self::process_payment_parameters(), [
             'instanceid' => $instanceid,
@@ -94,7 +134,7 @@ class enrol_authorizedotnet_externallib extends external_api {
             (bool)$plugin->get_config('checkproductionmode')
         );
 
-        $response = $helper->create_transaction($cost, 'USD', $opaquedataobject, $user, $course);
+        $response = $helper->create_transaction($cost, $opaquedataobject);
         $success = false;
         $message = '';
 
@@ -170,6 +210,11 @@ class enrol_authorizedotnet_externallib extends external_api {
         ];
     }
 
+    /**
+     * Returns description of process_payment return values.
+     *
+     * @return external_function_parameters
+     */
     public static function process_payment_returns() {
         return new external_function_parameters([
             'success' => new external_value(PARAM_BOOL, 'Whether everything was successful or not.'),
