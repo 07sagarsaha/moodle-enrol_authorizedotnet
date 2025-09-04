@@ -45,29 +45,13 @@ class enrol_authorizedotnet_plugin extends enrol_plugin {
      * @return string ISO-4217 currency code (e.g., "USD")
      */
     public function get_merchant_currency() {
+        $plugin = enrol_get_plugin('authorizedotnet');
         $helper = new enrol_authorizedotnet\authorizedotnet_helper(
-            $this->get_config('loginid'),
-            $this->get_config('transactionkey'),
-            (bool) $this->get_config('checkproductionmode')
+            $plugin->get_config('loginid'),
+            $plugin->get_config('transactionkey'),
+            (bool) $plugin->get_config('checkproductionmode')
         );
         return $helper->get_merchant_currency();
-    }
-
-    /**
-     * Return the currencies supported by this plugin for display/localisation.
-     *
-     * @return array map of currency code => lang_string
-     */
-    public function get_currencies() {
-        $currencies = [
-            'AUD' => new lang_string('AUD', 'core_currencies'),
-            'USD' => new lang_string('USD', 'core_currencies'),
-            'CAD' => new lang_string('CAD', 'core_currencies'),
-            'EUR' => new lang_string('EUR', 'core_currencies'),
-            'GBP' => new lang_string('GBP', 'core_currencies'),
-            'NZD' => new lang_string('NZD', 'core_currencies'),
-        ];
-        return $currencies;
     }
 
     /**
